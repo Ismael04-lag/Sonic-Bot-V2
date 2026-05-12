@@ -3,7 +3,7 @@ const { createCanvas } = require("canvas");
 const path = require("path");
 const axios = require("axios");
 
-const API_URL = "https://hedgehog-bank-api.onrender.com/api/bank";
+const API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/parse";
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
 
