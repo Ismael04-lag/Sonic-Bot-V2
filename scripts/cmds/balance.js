@@ -4,7 +4,7 @@ const axios = require("axios");
 const { toBold } = require("../../utils/toBold.js");
 
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
-const BANK_API_URL = "https://hedgehog-bank-api.onrender.com/api/bank";
+const BANK_API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/parse";
 
 function toBigInt(value) {
