@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { createCanvas } = require("canvas");
+const { createCanvas, loadImage } = require("canvas");
 const path = require("path");
 const axios = require("axios");
 
@@ -118,13 +118,13 @@ function wrapText(text, maxWidth = 42) {
     let currentLine = "";
     let currentWidth = 0;
     const words = text.split(' ');
-    
+
     for (let i = 0; i < words.length; i++) {
         const word = words[i];
         const wordWidth = getDisplayWidth(word);
         const separatorWidth = currentLine === "" ? 0 : 1;
         const totalWidth = currentWidth + separatorWidth + wordWidth;
-        
+
         if (totalWidth <= maxWidth) {
             if (currentLine === "") {
                 currentLine = word;
@@ -153,6 +153,405 @@ function formatStyledMessage(contentLines, maxWidth = 42) {
     }
     msg += `╰─────────────•┈┈`;
     return msg;
+}
+
+async function generateRealisticBankCard(title, balance, messageText, username, cvv = null, cardData = null, avatarUrl = null) {
+    const width = 600;
+    const height = 380;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#1a1c2b");
+    gradient.addColorStop(0.5, "#0f1023");
+    gradient.addColorStop(1, "#0a0a1a");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    for (let i = 0; i < width; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i + 2, height);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(8, 8, width - 16, height - 16);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.fillRect(0, 50, width, 60);
+
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 18px 'Courier New'";
+    ctx.fillText("HEDGEHOG", 25, 45);
+    ctx.font = "10px 'Courier New'";
+    ctx.fillStyle = "rgba(212, 175, 55, 0.7)";
+    ctx.fillText("PREMIUM BANKING", 25, 62);
+
+    if (avatarUrl) {
+        try {
+            const avatar = await loadImage(avatarUrl);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(avatar, width - 85, 15, 70, 70);
+            ctx.restore();
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.strokeStyle = "#d4af37";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+        } catch (e) {
+            ctx.fillStyle = "#d4af37";
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#fff";
+            ctx.font = "28px 'Courier New'";
+            ctx.fillText("👤", width - 68, 68);
+        }
+    }
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.beginPath();
+    ctx.roundRect(25, 85, 70, 45, 8);
+    ctx.fill();
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 12px 'Courier New'";
+    ctx.fillText("CHIP", 48, 112);
+    for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = i % 2 === 0 ? "#d4af37" : "#b8960c";
+        ctx.fillRect(30 + i * 8, 118, 3, 5);
+    }
+
+    ctx.fillStyle = "#e0e0e0";
+    ctx.font = "bold 20px 'Courier New'";
+    let cardNumber = cardData?.cardNumber || "4532 **** **** 5772";
+    const cardNumbers = cardNumber.split(" ");
+    let formattedNumber = "";
+    for (let i = 0; i < cardNumbers.length; i++) {
+        if (cardNumbers[i] === "****") {
+            formattedNumber += "****";
+        } else {
+            formattedNumber += cardNumbers[i];
+        }
+        if (i < cardNumbers.length - 1) formattedNumber += " ";
+    }
+    ctx.fillText(formattedNumber, 25, 160);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("VALID", 25, 188);
+    ctx.fillText("THRU", 25, 200);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 13px 'Courier New'";
+    const expiry = cardData?.cardExpiry || "12/28";
+    ctx.fillText(expiry, 25, 218);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 16px 'Courier New'";
+    const cardHolderName = username.toUpperCase().substring(0, 22);
+    ctx.fillText(cardHolderName, 25, 260);
+
+    ctx.fillStyle = "rgba(212, 175, 55, 0.15)";
+    ctx.fillRect(width - 150, height - 75, 135, 55);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 26px 'Courier New'";
+    ctx.fillText(balance, width - 145, height - 35);
+
+    ctx.fillStyle = "#88ff88";
+    ctx.font = "11px 'Courier New'";
+    const msgLines = messageText.split('\n');
+    let msgY = height - 70;
+    for (let i = 0; i < Math.min(msgLines.length, 2); i++) {
+        ctx.fillStyle = i === 0 ? "#88ff88" : "#aaa";
+        ctx.fillText(msgLines[i], width - 145, msgY);
+        msgY += 18;
+    }
+
+    if (cvv) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.font = "9px 'Courier New'";
+        ctx.fillText("CVV", width - 55, 115);
+        ctx.fillStyle = "#d4af37";
+        ctx.font = "bold 14px 'Courier New'";
+        ctx.fillText(cvv.toString(), width - 55, 133);
+    }
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+    ctx.fillRect(0, height - 22, width, 22);
+    ctx.fillStyle = "rgba(212, 175, 55, 0.5)";
+    ctx.font = "8px 'Courier New'";
+    ctx.fillText("HEDGEHOG BANK • PREMIUM • SINCE 2025", width / 2 - 145, height - 8);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.fillText(title, width - 85, height - 8);
+
+    return canvas.toBuffer();
+}
+
+async function generateLotteryCard(username, ticketPrice, win, winAmount, numbers, drawnNumbers, matchCount) {
+    const canvas = createCanvas(600, 420);
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 600, 420);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(0.5, "#16213e");
+    gradient.addColorStop(1, "#0f3460");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 600, 420);
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, 580, 400);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 20px 'Courier New'";
+    ctx.fillText("HEDGEHOG LOTTERY", 30, 55);
+    ctx.font = "10px 'Courier New'";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("LUCKY DRAW", 30, 75);
+    ctx.fillStyle = "#d4af37";
+    ctx.fillRect(480, 35, 45, 30);
+    ctx.fillStyle = "#b8960c";
+    ctx.fillRect(484, 39, 37, 22);
+    const cardHolder = username.toUpperCase().substring(0, 18);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 12px 'Courier New'";
+    ctx.fillText(cardHolder, 30, 110);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("PLAYER", 30, 125);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 18px 'Courier New'";
+    ctx.fillText("NUMEROS TIRES", 380, 110);
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px 'Courier New'";
+    ctx.fillText(numbers.join(" - "), 380, 150);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 18px 'Courier New'";
+    ctx.fillText("RESULTAT", 380, 200);
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px 'Courier New'";
+    ctx.fillText(drawnNumbers.join(" - "), 380, 240);
+    ctx.fillStyle = "#88ff88";
+    ctx.font = "bold 14px 'Courier New'";
+    ctx.fillText(`CORRESPONDANCES: ${matchCount}`, 380, 290);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 28px 'Courier New'";
+    ctx.fillText(`${await formatNumber(bankData?.bank || 0n)}$`, 30, 315);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("NEW BALANCE", 30, 340);
+    if (win) {
+        ctx.fillStyle = "#00ff88";
+        ctx.font = "bold 16px 'Courier New'";
+        ctx.fillText(`GAIN: +${await formatNumber(winAmount)}$`, 380, 340);
+    } else {
+        ctx.fillStyle = "#ff4444";
+        ctx.font = "bold 16px 'Courier New'";
+        ctx.fillText(`PERTE: -${await formatNumber(ticketPrice)}$`, 380, 340);
+    }
+    const date = new Date();
+    const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
+    ctx.fillStyle = "#666";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText(dateStr, 30, 395);
+    return canvas.toBuffer();
+}
+
+async function generateParrainCard(username, code, count, gains, type) {
+    const canvas = createCanvas(600, 420);
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 600, 420);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(0.5, "#16213e");
+    gradient.addColorStop(1, "#0f3460");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 600, 420);
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, 580, 400);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 20px 'Courier New'";
+    ctx.fillText("HEDGEHOG PARRAINAGE", 30, 55);
+    ctx.font = "10px 'Courier New'";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("REFERRAL", 30, 75);
+    ctx.fillStyle = "#d4af37";
+    ctx.fillRect(480, 35, 45, 30);
+    ctx.fillStyle = "#b8960c";
+    ctx.fillRect(484, 39, 37, 22);
+    const cardHolder = username.toUpperCase().substring(0, 18);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 12px 'Courier New'";
+    ctx.fillText(cardHolder, 30, 110);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("PLAYER", 30, 125);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 18px 'Courier New'";
+    if (type === "create") {
+        ctx.fillText("CODE CREE", 380, 110);
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px 'Courier New'";
+        ctx.fillText(code, 380, 160);
+        ctx.fillStyle = "#88ff88";
+        ctx.font = "14px 'Courier New'";
+        ctx.fillText("Partagez ce code !", 380, 210);
+    } else if (type === "stats") {
+        ctx.fillText("STATISTIQUES", 380, 110);
+        ctx.fillStyle = "#fff";
+        ctx.font = "16px 'Courier New'";
+        ctx.fillText(`Code: ${code}`, 380, 160);
+        ctx.fillText(`Parraines: ${count}`, 380, 190);
+        ctx.fillText(`Gains: ${await formatNumber(gains)}$`, 380, 220);
+    } else if (type === "use") {
+        ctx.fillText("CODE UTILISE", 380, 110);
+        ctx.fillStyle = "#fff";
+        ctx.font = "20px 'Courier New'";
+        ctx.fillText(code, 380, 160);
+        ctx.fillStyle = "#88ff88";
+        ctx.font = "14px 'Courier New'";
+        ctx.fillText(`Bonus: +10000$`, 380, 210);
+    }
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 28px 'Courier New'";
+    ctx.fillText(`${await formatNumber(bankData?.bank || 0n)}$`, 30, 315);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("NEW BALANCE", 30, 340);
+    const date = new Date();
+    const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
+    ctx.fillStyle = "#666";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText(dateStr, 30, 395);
+    return canvas.toBuffer();
+}
+
+async function generateGambleCard(username, amount, win, winAmount, choice, result) {
+    const canvas = createCanvas(600, 420);
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 600, 420);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(0.5, "#16213e");
+    gradient.addColorStop(1, "#0f3460");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 600, 420);
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, 580, 400);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 20px 'Courier New'";
+    ctx.fillText("HEDGEHOG CASINO", 30, 55);
+    ctx.font = "10px 'Courier New'";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("PILE OU FACE", 30, 75);
+    ctx.fillStyle = "#d4af37";
+    ctx.fillRect(480, 35, 45, 30);
+    ctx.fillStyle = "#b8960c";
+    ctx.fillRect(484, 39, 37, 22);
+    const cardHolder = username.toUpperCase().substring(0, 18);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 12px 'Courier New'";
+    ctx.fillText(cardHolder, 30, 110);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("JOUEUR", 30, 125);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 18px 'Courier New'";
+    ctx.fillText("VOTRE CHOIX", 380, 110);
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px 'Courier New'";
+    ctx.fillText(choice === "pile" ? "🪙 PILE" : "🪙 FACE", 380, 150);
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "bold 18px 'Courier New'";
+    ctx.fillText("RESULTAT", 380, 200);
+    ctx.fillStyle = "#fff";
+    ctx.font = "24px 'Courier New'";
+    ctx.fillText(result === "pile" ? "🪙 PILE" : "🪙 FACE", 380, 240);
+    ctx.fillStyle = "#88ff88";
+    ctx.font = "bold 14px 'Courier New'";
+    ctx.fillText(win ? "🎉 GAGNE !" : "💀 PERDU !", 380, 290);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 28px 'Courier New'";
+    ctx.fillText(`${await formatNumber(bankData?.bank || 0n)}$`, 30, 315);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("NEW BALANCE", 30, 340);
+    if (win) {
+        ctx.fillStyle = "#00ff88";
+        ctx.font = "bold 16px 'Courier New'";
+        ctx.fillText(`GAIN: +${await formatNumber(winAmount)}$`, 380, 340);
+    } else {
+        ctx.fillStyle = "#ff4444";
+        ctx.font = "bold 16px 'Courier New'";
+        ctx.fillText(`PERTE: -${await formatNumber(amount)}$`, 380, 340);
+    }
+    const date = new Date();
+    const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
+    ctx.fillStyle = "#666";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText(dateStr, 30, 395);
+    return canvas.toBuffer();
+}
+
+async function generateTransferCard(username, targetName, amount, newBalance) {
+    const canvas = createCanvas(600, 420);
+    const ctx = canvas.getContext("2d");
+    const gradient = ctx.createLinearGradient(0, 0, 600, 420);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(0.5, "#16213e");
+    gradient.addColorStop(1, "#0f3460");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 600, 420);
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, 580, 400);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 20px 'Courier New'";
+    ctx.fillText("HEDGEHOG BANK", 30, 55);
+    ctx.font = "10px 'Courier New'";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("TRANSFERT", 30, 75);
+    ctx.fillStyle = "#e0e0e0";
+    ctx.font = "22px 'Courier New'";
+    ctx.fillText("**** **** **** 4532", 30, 165);
+    ctx.font = "12px 'Courier New'";
+    ctx.fillStyle = "#ccc";
+    ctx.fillText("VALID THRU", 30, 200);
+    ctx.fillStyle = "#fff";
+    ctx.font = "14px 'Courier New'";
+    ctx.fillText("12/28", 120, 200);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 16px 'Courier New'";
+    ctx.fillText("TRANSFER", 380, 210);
+    const cardHolder = username.toUpperCase().substring(0, 20);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 14px 'Courier New'";
+    ctx.fillText(cardHolder, 30, 250);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("EXPEDITEUR", 30, 265);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 28px 'Courier New'";
+    ctx.fillText(`${await formatNumber(newBalance)}$`, 30, 315);
+    ctx.fillStyle = "#aaa";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("NOUVEAU SOLDE", 30, 335);
+    ctx.fillStyle = "#88ff88";
+    ctx.font = "12px 'Courier New'";
+    ctx.fillText(`Destinataire: ${targetName}`, 350, 300);
+    ctx.fillText(`Montant: -${await formatNumber(amount)}$`, 350, 320);
+    const date = new Date();
+    const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
+    ctx.fillStyle = "#666";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText(dateStr, 30, 395);
+    return canvas.toBuffer();
 }
 
 module.exports = {
@@ -283,333 +682,13 @@ module.exports = {
             try { const u = await api.getUserInfo(uid); return u[uid]?.name || uid; } catch(e) { return uid; }
         }
 
-        async function generateBankCard(title, balance, messageText, username, cvv = null, cardData = null) {
-            const canvas = createCanvas(600, 420);
-            const ctx = canvas.getContext("2d");
-            const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-            gradient.addColorStop(0, "#1a1a2e");
-            gradient.addColorStop(0.5, "#16213e");
-            gradient.addColorStop(1, "#0f3460");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 600, 420);
-            ctx.strokeStyle = "#d4af37";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 580, 400);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillText("HEDGEHOG BANK", 30, 55);
-            ctx.font = "10px 'Courier New'";
-            ctx.fillStyle = "#aaa";
-            ctx.fillText("PREMIUM CARD", 30, 75);
-            ctx.fillStyle = "#d4af37";
-            ctx.fillRect(440, 40, 50, 35);
-            ctx.fillStyle = "#b8960c";
-            ctx.fillRect(445, 45, 40, 25);
-            ctx.fillStyle = "#e0e0e0";
-            ctx.font = "22px 'Courier New'";
-            let cardNumber = cardData?.cardNumber || "**** **** **** " + Math.floor(Math.random() * 9000 + 1000);
-            ctx.fillText(cardNumber, 30, 165);
-            ctx.fillStyle = "#fff";
-            ctx.font = "14px 'Courier New'";
-            const expiry = cardData?.cardExpiry || "12/28";
-            ctx.fillText(expiry, 120, 200);
-            ctx.font = "12px 'Courier New'";
-            ctx.fillStyle = "#ccc";
-            ctx.fillText("VALID THRU", 30, 200);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 16px 'Courier New'";
-            ctx.fillText(title.toUpperCase(), 380, 210);
-            const cardHolder = username.toUpperCase().substring(0, 20);
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 14px 'Courier New'";
-            ctx.fillText(cardHolder, 30, 250);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("CARDHOLDER", 30, 265);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 28px 'Courier New'";
-            ctx.fillText(`${await formatNumberAsync(balance)}`, 30, 315);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("CURRENT BALANCE", 30, 335);
-            ctx.fillStyle = "#88ff88";
-            ctx.font = "12px 'Courier New'";
-            const lines = messageText.split('\n');
-            let y = 300;
-            for (let i = 0; i < Math.min(lines.length, 3); i++) {
-                ctx.fillStyle = i === 0 ? "#88ff88" : "#ccc";
-                ctx.fillText(lines[i], 350, y);
-                y += 20;
+        async function getUserAvatar(uid) {
+            try {
+                const info = await api.getUserInfo(uid);
+                return info[uid]?.thumbSrc || `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
+            } catch(e) {
+                return `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
             }
-            if (cvv) {
-                ctx.fillStyle = "#d4af37";
-                ctx.font = "bold 14px 'Courier New'";
-                ctx.fillText(cvv.toString(), 540, 100);
-            }
-            const date = new Date();
-            const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-            ctx.fillStyle = "#666";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText(dateStr, 30, 395);
-            return canvas.toBuffer();
-        }
-
-        async function generateLotteryCard(username, ticketPrice, win, winAmount, numbers, drawnNumbers, matchCount) {
-            const canvas = createCanvas(600, 420);
-            const ctx = canvas.getContext("2d");
-            const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-            gradient.addColorStop(0, "#1a1a2e");
-            gradient.addColorStop(0.5, "#16213e");
-            gradient.addColorStop(1, "#0f3460");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 600, 420);
-            ctx.strokeStyle = "#d4af37";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 580, 400);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillText("HEDGEHOG LOTTERY", 30, 55);
-            ctx.font = "10px 'Courier New'";
-            ctx.fillStyle = "#aaa";
-            ctx.fillText("LUCKY DRAW", 30, 75);
-            ctx.fillStyle = "#d4af37";
-            ctx.fillRect(480, 35, 45, 30);
-            ctx.fillStyle = "#b8960c";
-            ctx.fillRect(484, 39, 37, 22);
-            const cardHolder = username.toUpperCase().substring(0, 18);
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 12px 'Courier New'";
-            ctx.fillText(cardHolder, 30, 110);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText("PLAYER", 30, 125);
-            ctx.fillStyle = "#ffd700";
-            ctx.font = "bold 18px 'Courier New'";
-            ctx.fillText("NUMEROS TIRES", 380, 110);
-            ctx.fillStyle = "#fff";
-            ctx.font = "24px 'Courier New'";
-            ctx.fillText(numbers.join(" - "), 380, 150);
-            ctx.fillStyle = "#ffd700";
-            ctx.font = "bold 18px 'Courier New'";
-            ctx.fillText("RESULTAT", 380, 200);
-            ctx.fillStyle = "#fff";
-            ctx.font = "24px 'Courier New'";
-            ctx.fillText(drawnNumbers.join(" - "), 380, 240);
-            ctx.fillStyle = "#88ff88";
-            ctx.font = "bold 14px 'Courier New'";
-            ctx.fillText(`CORRESPONDANCES: ${matchCount}`, 380, 290);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 28px 'Courier New'";
-            ctx.fillText(`${await formatNumberAsync(bankData?.bank || 0n)}$`, 30, 315);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("NEW BALANCE", 30, 340);
-            if (win) {
-                ctx.fillStyle = "#00ff88";
-                ctx.font = "bold 16px 'Courier New'";
-                ctx.fillText(`GAIN: +${await formatNumberAsync(winAmount)}$`, 380, 340);
-            } else {
-                ctx.fillStyle = "#ff4444";
-                ctx.font = "bold 16px 'Courier New'";
-                ctx.fillText(`PERTE: -${await formatNumberAsync(ticketPrice)}$`, 380, 340);
-            }
-            const date = new Date();
-            const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-            ctx.fillStyle = "#666";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText(dateStr, 30, 395);
-            return canvas.toBuffer();
-        }
-
-        async function generateParrainCard(username, code, count, gains, type) {
-            const canvas = createCanvas(600, 420);
-            const ctx = canvas.getContext("2d");
-            const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-            gradient.addColorStop(0, "#1a1a2e");
-            gradient.addColorStop(0.5, "#16213e");
-            gradient.addColorStop(1, "#0f3460");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 600, 420);
-            ctx.strokeStyle = "#d4af37";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 580, 400);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillText("HEDGEHOG PARRAINAGE", 30, 55);
-            ctx.font = "10px 'Courier New'";
-            ctx.fillStyle = "#aaa";
-            ctx.fillText("REFERRAL", 30, 75);
-            ctx.fillStyle = "#d4af37";
-            ctx.fillRect(480, 35, 45, 30);
-            ctx.fillStyle = "#b8960c";
-            ctx.fillRect(484, 39, 37, 22);
-            const cardHolder = username.toUpperCase().substring(0, 18);
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 12px 'Courier New'";
-            ctx.fillText(cardHolder, 30, 110);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText("PLAYER", 30, 125);
-            ctx.fillStyle = "#ffd700";
-            ctx.font = "bold 18px 'Courier New'";
-            if (type === "create") {
-                ctx.fillText("CODE CREE", 380, 110);
-                ctx.fillStyle = "#fff";
-                ctx.font = "24px 'Courier New'";
-                ctx.fillText(code, 380, 160);
-                ctx.fillStyle = "#88ff88";
-                ctx.font = "14px 'Courier New'";
-                ctx.fillText("Partagez ce code !", 380, 210);
-            } else if (type === "stats") {
-                ctx.fillText("STATISTIQUES", 380, 110);
-                ctx.fillStyle = "#fff";
-                ctx.font = "16px 'Courier New'";
-                ctx.fillText(`Code: ${code}`, 380, 160);
-                ctx.fillText(`Parraines: ${count}`, 380, 190);
-                ctx.fillText(`Gains: ${await formatNumberAsync(gains)}$`, 380, 220);
-            } else if (type === "use") {
-                ctx.fillText("CODE UTILISE", 380, 110);
-                ctx.fillStyle = "#fff";
-                ctx.font = "20px 'Courier New'";
-                ctx.fillText(code, 380, 160);
-                ctx.fillStyle = "#88ff88";
-                ctx.font = "14px 'Courier New'";
-                ctx.fillText(`Bonus: +10000$`, 380, 210);
-            }
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 28px 'Courier New'";
-            ctx.fillText(`${await formatNumberAsync(bankData?.bank || 0n)}$`, 30, 315);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("NEW BALANCE", 30, 340);
-            const date = new Date();
-            const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-            ctx.fillStyle = "#666";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText(dateStr, 30, 395);
-            return canvas.toBuffer();
-        }
-
-        async function generateGambleCard(username, amount, win, winAmount, choice, result) {
-            const canvas = createCanvas(600, 420);
-            const ctx = canvas.getContext("2d");
-            const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-            gradient.addColorStop(0, "#1a1a2e");
-            gradient.addColorStop(0.5, "#16213e");
-            gradient.addColorStop(1, "#0f3460");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 600, 420);
-            ctx.strokeStyle = "#d4af37";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 580, 400);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillText("HEDGEHOG CASINO", 30, 55);
-            ctx.font = "10px 'Courier New'";
-            ctx.fillStyle = "#aaa";
-            ctx.fillText("PILE OU FACE", 30, 75);
-            ctx.fillStyle = "#d4af37";
-            ctx.fillRect(480, 35, 45, 30);
-            ctx.fillStyle = "#b8960c";
-            ctx.fillRect(484, 39, 37, 22);
-            const cardHolder = username.toUpperCase().substring(0, 18);
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 12px 'Courier New'";
-            ctx.fillText(cardHolder, 30, 110);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText("JOUEUR", 30, 125);
-            ctx.fillStyle = "#ffd700";
-            ctx.font = "bold 18px 'Courier New'";
-            ctx.fillText("VOTRE CHOIX", 380, 110);
-            ctx.fillStyle = "#fff";
-            ctx.font = "24px 'Courier New'";
-            ctx.fillText(choice === "pile" ? "🪙 PILE" : "🪙 FACE", 380, 150);
-            ctx.fillStyle = "#ffd700";
-            ctx.font = "bold 18px 'Courier New'";
-            ctx.fillText("RESULTAT", 380, 200);
-            ctx.fillStyle = "#fff";
-            ctx.font = "24px 'Courier New'";
-            ctx.fillText(result === "pile" ? "🪙 PILE" : "🪙 FACE", 380, 240);
-            ctx.fillStyle = "#88ff88";
-            ctx.font = "bold 14px 'Courier New'";
-            ctx.fillText(win ? "🎉 GAGNE !" : "💀 PERDU !", 380, 290);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 28px 'Courier New'";
-            ctx.fillText(`${await formatNumberAsync(bankData?.bank || 0n)}$`, 30, 315);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("NEW BALANCE", 30, 340);
-            if (win) {
-                ctx.fillStyle = "#00ff88";
-                ctx.font = "bold 16px 'Courier New'";
-                ctx.fillText(`GAIN: +${await formatNumberAsync(winAmount)}$`, 380, 340);
-            } else {
-                ctx.fillStyle = "#ff4444";
-                ctx.font = "bold 16px 'Courier New'";
-                ctx.fillText(`PERTE: -${await formatNumberAsync(amount)}$`, 380, 340);
-            }
-            const date = new Date();
-            const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-            ctx.fillStyle = "#666";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText(dateStr, 30, 395);
-            return canvas.toBuffer();
-        }
-
-        async function generateTransferCard(username, targetName, amount, newBalance) {
-            const canvas = createCanvas(600, 420);
-            const ctx = canvas.getContext("2d");
-            const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-            gradient.addColorStop(0, "#1a1a2e");
-            gradient.addColorStop(0.5, "#16213e");
-            gradient.addColorStop(1, "#0f3460");
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 600, 420);
-            ctx.strokeStyle = "#d4af37";
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 580, 400);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillText("HEDGEHOG BANK", 30, 55);
-            ctx.font = "10px 'Courier New'";
-            ctx.fillStyle = "#aaa";
-            ctx.fillText("TRANSFERT", 30, 75);
-            ctx.fillStyle = "#e0e0e0";
-            ctx.font = "22px 'Courier New'";
-            ctx.fillText("**** **** **** 4532", 30, 165);
-            ctx.font = "12px 'Courier New'";
-            ctx.fillStyle = "#ccc";
-            ctx.fillText("VALID THRU", 30, 200);
-            ctx.fillStyle = "#fff";
-            ctx.font = "14px 'Courier New'";
-            ctx.fillText("12/28", 120, 200);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 16px 'Courier New'";
-            ctx.fillText("TRANSFER", 380, 210);
-            const cardHolder = username.toUpperCase().substring(0, 20);
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 14px 'Courier New'";
-            ctx.fillText(cardHolder, 30, 250);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("EXPEDITEUR", 30, 265);
-            ctx.fillStyle = "#d4af37";
-            ctx.font = "bold 28px 'Courier New'";
-            ctx.fillText(`${await formatNumberAsync(newBalance)}$`, 30, 315);
-            ctx.fillStyle = "#aaa";
-            ctx.font = "10px 'Courier New'";
-            ctx.fillText("NOUVEAU SOLDE", 30, 335);
-            ctx.fillStyle = "#88ff88";
-            ctx.font = "12px 'Courier New'";
-            ctx.fillText(`Destinataire: ${targetName}`, 350, 300);
-            ctx.fillText(`Montant: -${await formatNumberAsync(amount)}$`, 350, 320);
-            const date = new Date();
-            const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-            ctx.fillStyle = "#666";
-            ctx.font = "9px 'Courier New'";
-            ctx.fillText(dateStr, 30, 395);
-            return canvas.toBuffer();
         }
 
         if (command === "vip") {
@@ -682,18 +761,19 @@ module.exports = {
             if (robAmount > targetBank.bank) robAmount = targetBank.bank;
             const success = Math.random() < 0.5;
             if (!success) {
-                return message.reply(formatStyledMessage([`💀 Échec du vol ! Vous avez tenté de voler ${await formatNumberAsync(robAmount)}$ mais vous vous êtes fait prendre.`]));
+                return message.reply(formatStyledMessage([`💀 Échec du vol ! Vous avez tenté de voler ${await formatNumber(robAmount)}$ mais vous vous êtes fait prendre.`]));
             }
             const transferResult = await transferApi(user, targetUid, Number(robAmount), bankData.card?.cardCvv);
             if (transferResult && transferResult.success) {
                 bankData = await getUserBankData(user);
                 const successMsg = [
                     `🦹‍♂️ Vol réussi !`,
-                    `💸 Vous avez volé ${await formatNumberAsync(robAmount)}$ à ${targetUid}.`,
-                    `💰 Nouveau solde : ${await formatNumberAsync(bankData.bank)}$`
+                    `💸 Vous avez volé ${await formatNumber(robAmount)}$ à ${targetUid}.`,
+                    `💰 Nouveau solde : ${await formatNumber(bankData.bank)}$`
                 ];
                 if (imageMode !== false) {
-                    const img = await generateBankCard("ROB", `${await formatNumberAsync(bankData.bank)}$`, `+ ${await formatNumberAsync(robAmount)}$ (vol)`, username);
+                    const avatarUrl = await getUserAvatar(user);
+                    const img = await generateRealisticBankCard("ROB", `${await formatNumber(bankData.bank)}$`, `+ ${await formatNumber(robAmount)}$ (vol)`, username, bankData.card?.cardCvv, bankData.card, avatarUrl);
                     const imgPath = `./bank_rob_${user}.png`;
                     fs.writeFileSync(imgPath, img);
                     await message.reply({ body: formatStyledMessage(successMsg), attachment: fs.createReadStream(imgPath) });
@@ -710,7 +790,7 @@ module.exports = {
                 let lines = ["📜 HISTORIQUE DES TRANSACTIONS"];
                 for (const tx of histResult.data.slice(0, limit)) {
                     const date = new Date(tx.date).toLocaleString();
-                    let amountStr = tx.amount >= 0 ? `+${await formatNumberAsync(tx.amount)}$` : `${await formatNumberAsync(tx.amount)}$`;
+                    let amountStr = tx.amount >= 0 ? `+${await formatNumber(tx.amount)}$` : `${await formatNumber(tx.amount)}$`;
                     let rawLine = `📌 ${tx.type} : ${amountStr} (${date})`;
                     const wrappedLines = wrapText(rawLine, 42);
                     for (const wl of wrappedLines) {
@@ -737,9 +817,10 @@ module.exports = {
                     if (depositResult?.success) {
                         bankData = await getUserBankData(user);
                         await updateUserCash(event.senderID, -amount);
-                        const txt = `✅ Dépôt de ${await formatNumberAsync(amount)}$ effectué ! Nouveau solde: ${await formatNumberAsync(bankData.bank)}$`;
+                        const txt = `✅ Dépôt de ${await formatNumber(amount)}$ effectué ! Nouveau solde: ${await formatNumber(bankData.bank)}$`;
                         if (imageMode !== false) {
-                            const img = await generateBankCard("DEPOSIT", `${await formatNumberAsync(bankData.bank)}$`, `+ ${await formatNumberAsync(amount)}$`, username);
+                            const avatarUrl = await getUserAvatar(user);
+                            const img = await generateRealisticBankCard("DEPOSIT", `${await formatNumber(bankData.bank)}$`, `+ ${await formatNumber(amount)}$`, username, bankData.card?.cardCvv, bankData.card, avatarUrl);
                             const imgPath = `./bank_deposit_${user}.png`;
                             fs.writeFileSync(imgPath, img);
                             await message.reply({ body: formatStyledMessage([txt]), attachment: fs.createReadStream(imgPath) });
@@ -753,9 +834,10 @@ module.exports = {
                     if (withdrawResult?.success) {
                         bankData = await getUserBankData(user);
                         await updateUserCash(event.senderID, amount);
-                        const txt = `💸 Retrait de ${await formatNumberAsync(amount)}$ effectué ! Nouveau solde: ${await formatNumberAsync(bankData.bank)}$`;
+                        const txt = `💸 Retrait de ${await formatNumber(amount)}$ effectué ! Nouveau solde: ${await formatNumber(bankData.bank)}$`;
                         if (imageMode !== false) {
-                            const img = await generateBankCard("WITHDRAW", `${await formatNumberAsync(bankData.bank)}$`, `- ${await formatNumberAsync(amount)}$`, username);
+                            const avatarUrl = await getUserAvatar(user);
+                            const img = await generateRealisticBankCard("WITHDRAW", `${await formatNumber(bankData.bank)}$`, `- ${await formatNumber(amount)}$`, username, bankData.card?.cardCvv, bankData.card, avatarUrl);
                             const imgPath = `./bank_withdraw_${user}.png`;
                             fs.writeFileSync(imgPath, img);
                             await message.reply({ body: formatStyledMessage([txt]), attachment: fs.createReadStream(imgPath) });
@@ -768,7 +850,7 @@ module.exports = {
                     const transferResult = await transferApi(user, pending.targetId, Number(amount), userCvv);
                     if (transferResult?.success) {
                         bankData = await getUserBankData(user);
-                        const txt = `💸 Transfert de ${await formatNumberAsync(amount)}$ vers ${pending.targetName} réussi ! Nouveau solde: ${await formatNumberAsync(bankData.bank)}$`;
+                        const txt = `💸 Transfert de ${await formatNumber(amount)}$ vers ${pending.targetName} réussi ! Nouveau solde: ${await formatNumber(bankData.bank)}$`;
                         if (imageMode !== false) {
                             const img = await generateTransferCard(username, pending.targetName, amount, bankData.bank);
                             const imgPath = `./bank_transfer_${user}.png`;
@@ -792,7 +874,7 @@ module.exports = {
                 savePendingTransactions();
                 const to1 = setTimeout(() => { if (pendingTransactions.has(user)) { pendingTransactions.delete(user); savePendingTransactions(); message.reply(formatStyledMessage(["⏰ Transaction expirée."])); } pendingTimeouts.delete(user); }, 15000);
                 pendingTimeouts.set(user, to1);
-                return message.reply(formatStyledMessage([`💳 Transaction de ${await formatNumberAsync(depositAmount)}$`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
+                return message.reply(formatStyledMessage([`💳 Transaction de ${await formatNumber(depositAmount)}$`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
 
             case "withdraw":
                 const withdrawAmount = await parseAmountWithSuffix(args[1]);
@@ -804,14 +886,15 @@ module.exports = {
                 savePendingTransactions();
                 const to2 = setTimeout(() => { if (pendingTransactions.has(user)) { pendingTransactions.delete(user); savePendingTransactions(); message.reply(formatStyledMessage(["⏰ Transaction expirée."])); } pendingTimeouts.delete(user); }, 15000);
                 pendingTimeouts.set(user, to2);
-                return message.reply(formatStyledMessage([`💳 Transaction de ${await formatNumberAsync(withdrawAmount)}$`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
+                return message.reply(formatStyledMessage([`💳 Transaction de ${await formatNumber(withdrawAmount)}$`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
 
             case "balance":
             case "show": {
                 const bal = bankData.bank || 0n;
-                const txt = `💰 Solde bancaire : ${await formatNumberAsync(bal)}$`;
+                const txt = `💰 Solde bancaire : ${await formatNumber(bal)}$`;
                 if (imageMode !== false) {
-                    const img = await generateBankCard("BALANCE", `${await formatNumberAsync(bal)}$`, "Disponible", username);
+                    const avatarUrl = await getUserAvatar(user);
+                    const img = await generateRealisticBankCard("BALANCE", `${await formatNumber(bal)}$`, "Disponible", username, bankData.card?.cardCvv, bankData.card, avatarUrl);
                     const imgPath = `./bank_balance_${user}.png`;
                     fs.writeFileSync(imgPath, img);
                     await message.reply({ body: formatStyledMessage([txt]), attachment: fs.createReadStream(imgPath) });
@@ -826,10 +909,11 @@ module.exports = {
                 if (interestRes.success) {
                     bankData = await getUserBankData(user);
                     const earned = toBigInt(interestRes.interestEarned);
-                    const txt = `📈 Intérêts crédités : ${await formatNumberAsync(earned)}$\n💰 Nouveau solde : ${await formatNumberAsync(bankData.bank)}$`;
+                    const txt = `📈 Intérêts crédités : ${await formatNumber(earned)}$\n💰 Nouveau solde : ${await formatNumber(bankData.bank)}$`;
                     const lines = txt.split('\n');
                     if (imageMode !== false) {
-                        const img = await generateBankCard("INTEREST", `${await formatNumberAsync(bankData.bank)}$`, `+ ${await formatNumberAsync(earned)}$`, username);
+                        const avatarUrl = await getUserAvatar(user);
+                        const img = await generateRealisticBankCard("INTEREST", `${await formatNumber(bankData.bank)}$`, `+ ${await formatNumber(earned)}$`, username, bankData.card?.cardCvv, bankData.card, avatarUrl);
                         const imgPath = `./bank_interest_${user}.png`;
                         fs.writeFileSync(imgPath, img);
                         await message.reply({ body: formatStyledMessage(lines), attachment: fs.createReadStream(imgPath) });
@@ -841,19 +925,44 @@ module.exports = {
 
             case "top":
             case "richest": {
-                const topRes = await getTopUsers();
-                if (topRes.success && topRes.data.length > 0) {
-                    let lines = ["👑 CLASSEMENT BANCAIRE"];
-                    for (let i = 0; i < Math.min(topRes.data.length, 25); i++) {
-                        const u = topRes.data[i];
-                        let name = u.userId;
-                        try { const ui = await api.getUserInfo(u.userId); name = ui[u.userId]?.name || u.userId; } catch(e) {}
-                        const line = `${i+1}. ${name} - ${await formatNumberAsync(u.bank || 0)}$`;
-                        const wrapped = wrapText(line, 42);
-                        for (const w of wrapped) lines.push(w);
+                try {
+                    const topRes = await getTopUsers();
+                    
+                    if (topRes.success && topRes.data && topRes.data.length > 0) {
+                        let lines = ["👑 CLASSEMENT BANCAIRE"];
+                        for (let i = 0; i < Math.min(topRes.data.length, 25); i++) {
+                            const u = topRes.data[i];
+                            let userName = `User_${String(u.userId).slice(-5)}`;
+                            try {
+                                const userInfo = await api.getUserInfo(u.userId);
+                                if (userInfo && userInfo[u.userId] && userInfo[u.userId].name) {
+                                    userName = userInfo[u.userId].name;
+                                }
+                            } catch (nameErr) {}
+                            const bankAmount = u.bank || "0";
+                            const line = `${i+1}. ${userName} - ${await formatNumber(bankAmount)}$`;
+                            const wrapped = wrapText(line, 42);
+                            for (const w of wrapped) lines.push(w);
+                        }
+                        return message.reply(formatStyledMessage(lines));
+                    } else {
+                        return message.reply(formatStyledMessage([
+                            "👑 CLASSEMENT BANCAIRE",
+                            "━━━━━━━━━━━━━━━━",
+                            "📊 Aucun utilisateur enregistré.",
+                            "💡 Faites `bank card` pour créer",
+                            "   votre compte bancaire !"
+                        ]));
                     }
-                    return message.reply(formatStyledMessage(lines));
-                } else return message.reply(formatStyledMessage(["📊 Aucun utilisateur enregistré."]));
+                } catch (topError) {
+                    console.error("Top command error:", topError);
+                    return message.reply(formatStyledMessage([
+                        "👑 CLASSEMENT BANCAIRE",
+                        "━━━━━━━━━━━━━━━━",
+                        "❌ Erreur lors du chargement",
+                        "   du classement. Réessaie plus tard."
+                    ]));
+                }
                 break;
             }
 
@@ -864,7 +973,8 @@ module.exports = {
                     bankData.card = userCardData;
                     const cvvMsg = `💳 Carte créée ! N°: ${userCardData.cardNumber}, Exp: ${userCardData.cardExpiry}, CVV: ${userCardData.cardCvv}`;
                     if (imageMode !== false) {
-                        const img = await generateBankCard("CARD", `${await formatNumberAsync(bankData.bank || 0n)}$`, cvvMsg, username, userCardData.cardCvv, userCardData);
+                        const avatarUrl = await getUserAvatar(user);
+                        const img = await generateRealisticBankCard("CARD", `${await formatNumber(bankData.bank || 0n)}$`, cvvMsg, username, userCardData.cardCvv, userCardData, avatarUrl);
                         const imgPath = `./bank_card_${user}.png`;
                         fs.writeFileSync(imgPath, img);
                         await message.reply({ body: formatStyledMessage([cvvMsg]), attachment: fs.createReadStream(imgPath) });
@@ -891,7 +1001,7 @@ module.exports = {
                 savePendingTransactions();
                 const to3 = setTimeout(() => { if (pendingTransactions.has(user)) { pendingTransactions.delete(user); savePendingTransactions(); message.reply(formatStyledMessage(["⏰ Transfert expiré."])); } pendingTimeouts.delete(user); }, 15000);
                 pendingTimeouts.set(user, to3);
-                return message.reply(formatStyledMessage([`💸 Transfert de ${await formatNumberAsync(transferAmount)}$ vers ${targetName}`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
+                return message.reply(formatStyledMessage([`💸 Transfert de ${await formatNumber(transferAmount)}$ vers ${targetName}`, `🔐 Entrez votre CVV (ex: bank 123) [15s]`]));
             }
 
             case "gamble":
@@ -916,7 +1026,7 @@ module.exports = {
                         const win = gambleRes.win;
                         const result = gambleRes.result;
                         const winAmount = toBigInt(gambleRes.winAmount);
-                        const txt = win ? `🎉 Gagné ! +${await formatNumberAsync(winAmount)}$` : `💀 Perdu ! -${await formatNumberAsync(betAmount)}$`;
+                        const txt = win ? `🎉 Gagné ! +${await formatNumber(winAmount)}$` : `💀 Perdu ! -${await formatNumber(betAmount)}$`;
                         if (imageMode !== false) {
                             const img = await generateGambleCard(username, betAmount, win, winAmount, choice, result);
                             const imgPath = `./bank_gamble_${user}.png`;
@@ -949,7 +1059,7 @@ module.exports = {
                         bankData = await getUserBankData(user);
                         const win = lotteryRes.win;
                         const winAmount = toBigInt(lotteryRes.winAmount || 0);
-                        const txt = win ? `🎉 Gain: +${await formatNumberAsync(winAmount)}$` : `💀 Perte: -${await formatNumberAsync(ticket)}$`;
+                        const txt = win ? `🎉 Gain: +${await formatNumber(winAmount)}$` : `💀 Perte: -${await formatNumber(ticket)}$`;
                         if (imageMode !== false) {
                             const img = await generateLotteryCard(username, ticket, win, winAmount, lotteryRes.userNumbers, lotteryRes.drawnNumbers, lotteryRes.matchCount);
                             const imgPath = `./bank_lottery_${user}.png`;
@@ -991,7 +1101,7 @@ module.exports = {
                     const useRes = await useParrainCode(user, code);
                     if (useRes.success) {
                         bankData = await getUserBankData(user);
-                        const txt = `🎉 Bonus 10000$ ajouté ! Nouveau solde: ${await formatNumberAsync(bankData.bank)}$`;
+                        const txt = `🎉 Bonus 10000$ ajouté ! Nouveau solde: ${await formatNumber(bankData.bank)}$`;
                         if (imageMode !== false) {
                             const img = await generateParrainCard(username, code, 0, 0, "use");
                             const imgPath = `./bank_parrain_use_${user}.png`;
