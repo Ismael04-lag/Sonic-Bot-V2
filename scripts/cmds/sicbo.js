@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { createCanvas } = require("canvas");
+const { createCanvas, loadImage } = require("canvas");
 const axios = require("axios");
 
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
@@ -57,8 +57,8 @@ async function getUserCash(userId) {
 }
 
 async function updateUserCash(userId, amount) {
+    const bigAmount = toBigInt(amount);
     try {
-        const bigAmount = toBigInt(amount);
         if (bigAmount >= 0n) {
             await axios.post(`${CASH_API_URL}/${userId}/add`, { amount: bigAmount.toString() });
         } else {
@@ -85,6 +85,16 @@ function getUserName(uid, api) {
         });
     });
 }
+
+async function getUserAvatar(uid, api) {
+    try {
+        const info = await api.getUserInfo(uid);
+        return info[uid]?.thumbSrc || `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
+    } catch(e) {
+        return `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
+    }
+}
+
 async function parseAmountWithSuffix(input) {
     if (!input) return 0n;
     const strInput = String(input).toLowerCase().trim();
@@ -162,100 +172,149 @@ function getPayout(betType, betValue, dice) {
     return payouts[betType] || 0;
 }
 
-async function generateSicboCard(username, betDisplay, amount, win, winAmount, newBalance, dice, sum, isTriple, payout) {
-    const canvas = createCanvas(600, 420);
+function formatStyledMessage(contentLines) {
+    let msg = `╭─────────────•┈┈\n`;
+    for (let line of contentLines) {
+        msg += `│ ${line}\n`;
+    }
+    msg += `╰─────────────•┈┈`;
+    return msg;
+}
+
+async function generateRealisticSicboCard(username, betDisplay, amount, win, winAmount, newBalance, dice, sum, isTriple, payout, avatarUrl) {
+    const width = 600;
+    const height = 380;
+    const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
-    const gradient = ctx.createLinearGradient(0, 0, 600, 420);
-    gradient.addColorStop(0, "#1a1a2e");
-    gradient.addColorStop(0.5, "#16213e");
-    gradient.addColorStop(1, "#0f3460");
+
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#1a1c2b");
+    gradient.addColorStop(0.5, "#0f1023");
+    gradient.addColorStop(1, "#0a0a1a");
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 600, 420);
-    ctx.strokeStyle = "#d4af37";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(10, 10, 580, 400);
+    ctx.fillRect(0, 0, width, height);
+
+    for (let i = 0; i < width; i += 4) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i + 2, height);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(8, 8, width - 16, height - 16);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.fillRect(0, 50, width, 60);
+
     ctx.fillStyle = "#d4af37";
     ctx.font = "bold 18px 'Courier New'";
-    ctx.fillText("UCHIWA BANK", 30, 55);
-    ctx.font = "9px 'Courier New'";
-    ctx.fillStyle = "#aaa";
-    ctx.fillText("PREMIUM GAMING CARD", 30, 75);
-    ctx.fillStyle = "#ffd700";
-    ctx.font = "bold 20px 'Courier New'";
-    ctx.fillText("SIC BO", 200, 55);
-    ctx.fillStyle = "#d4af37";
-    ctx.fillRect(480, 35, 45, 30);
-    ctx.fillStyle = "#b8960c";
-    ctx.fillRect(484, 39, 37, 22);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 12px 'Courier New'";
-    ctx.fillText(username.toUpperCase().substring(0, 18), 30, 110);
-    ctx.fillStyle = "#aaa";
-    ctx.font = "9px 'Courier New'";
-    ctx.fillText("CARDHOLDER", 30, 125);
-    const diceEmojis = { 1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅" };
-    ctx.font = "48px 'Segoe UI Emoji'";
-    ctx.fillStyle = "#fff";
-    ctx.fillText(diceEmojis[dice[0]], 80, 200);
-    ctx.fillText(diceEmojis[dice[1]], 180, 200);
-    ctx.fillText(diceEmojis[dice[2]], 280, 200);
-    ctx.font = "bold 16px 'Courier New'";
-    ctx.fillStyle = "#d4af37";
-    ctx.fillText(`TOTAL: ${sum}`, 80, 250);
-    if (isTriple) {
-        ctx.fillStyle = "#ff4444";
-        ctx.font = "bold 14px 'Courier New'";
-        ctx.fillText("TRIPLE !", 80, 280);
-    }
-    ctx.fillStyle = "#88ff88";
-    ctx.font = "12px 'Courier New'";
-    ctx.fillText("PARI:", 400, 110);
-    ctx.fillStyle = "#fff";
-    const shortBetDisplay = betDisplay.length > 20 ? betDisplay.substring(0, 17) + "..." : betDisplay;
-    ctx.fillText(shortBetDisplay, 400, 130);
-    ctx.fillStyle = "#88ff88";
-    ctx.fillText("MISE:", 400, 160);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(`${await formatNumber(amount)}$`, 400, 180);
-    ctx.fillStyle = "#88ff88";
-    ctx.fillText("MULTIPLICATEUR:", 400, 210);
-    ctx.fillStyle = "#fff";
-    ctx.fillText(`x${payout}`, 400, 230);
-    if (win) {
-        ctx.fillStyle = "#00ff88";
-        ctx.font = "bold 14px 'Courier New'";
-        ctx.fillText("VICTOIRE !", 400, 270);
-        ctx.fillStyle = "#88ff88";
-        ctx.fillText(`+${await formatNumber(winAmount)}$`, 400, 295);
-    } else {
-        ctx.fillStyle = "#ff4444";
-        ctx.font = "bold 14px 'Courier New'";
-        ctx.fillText("PERDU !", 400, 270);
-        ctx.fillStyle = "#ff8888";
-        ctx.fillText(`-${await formatNumber(amount)}$`, 400, 295);
-    }
-    ctx.fillStyle = "#d4af37";
-    ctx.font = "bold 24px 'Courier New'";
-    ctx.fillText(`${await formatNumber(newBalance)}$`, 30, 370);
-    ctx.fillStyle = "#aaa";
+    ctx.fillText("HEDGEHOG", 25, 45);
     ctx.font = "10px 'Courier New'";
-    ctx.fillText("NOUVEAU SOLDE", 30, 395);
+    ctx.fillStyle = "rgba(212, 175, 55, 0.7)";
+    ctx.fillText("SIC BO CASINO", 25, 62);
+
+    if (avatarUrl) {
+        try {
+            const avatar = await loadImage(avatarUrl);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+            ctx.drawImage(avatar, width - 85, 15, 70, 70);
+            ctx.restore();
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.strokeStyle = "#d4af37";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+        } catch (e) {
+            ctx.fillStyle = "#d4af37";
+            ctx.beginPath();
+            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = "#fff";
+            ctx.font = "28px 'Courier New'";
+            ctx.fillText("👤", width - 68, 68);
+        }
+    }
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.beginPath();
+    ctx.roundRect(25, 85, 70, 45, 8);
+    ctx.fill();
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 12px 'Courier New'";
+    ctx.fillText("GAME", 48, 112);
+    for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = i % 2 === 0 ? "#d4af37" : "#b8960c";
+        ctx.fillRect(30 + i * 8, 118, 3, 5);
+    }
+
+    const diceEmojis = { 1: "⚀", 2: "⚁", 3: "⚂", 4: "⚃", 5: "⚄", 6: "⚅" };
+    ctx.font = "42px 'Segoe UI Emoji'";
     ctx.fillStyle = "#fff";
-    ctx.font = "20px 'Courier New'";
-    ctx.fillText("📡", 540, 380);
-    const date = new Date();
-    const dateStr = `${date.getDate()}/${date.getMonth()+1}/${date.getFullYear()}`;
-    ctx.fillStyle = "#666";
+    ctx.fillText(diceEmojis[dice[0]], 280, 170);
+    ctx.fillText(diceEmojis[dice[1]], 340, 170);
+    ctx.fillText(diceEmojis[dice[2]], 400, 170);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
     ctx.font = "9px 'Courier New'";
-    ctx.fillText(dateStr, 500, 395);
+    ctx.fillText("DICE", 25, 188);
+    ctx.fillText("RESULT", 25, 200);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 13px 'Courier New'";
+    ctx.fillText(win ? "WINNER" : "LOSER", 25, 218);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 16px 'Courier New'";
+    const cardHolderName = username.toUpperCase().substring(0, 22);
+    ctx.fillText(cardHolderName, 25, 260);
+
+    ctx.fillStyle = "rgba(212, 175, 55, 0.15)";
+    ctx.fillRect(width - 150, height - 75, 135, 55);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 26px 'Courier New'";
+    ctx.fillText(`${await formatNumber(newBalance)}$`, width - 145, height - 35);
+
+    ctx.fillStyle = "#88ff88";
+    ctx.font = "11px 'Courier New'";
+    if (win) {
+        ctx.fillText(`GAIN: +${await formatNumber(winAmount)}$ (x${payout})`, width - 145, height - 70);
+    } else {
+        ctx.fillText(`PERTE: -${await formatNumber(amount)}$`, width - 145, height - 70);
+    }
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("BET", width - 55, 115);
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 14px 'Courier New'";
+    const shortBet = betDisplay.length > 12 ? betDisplay.substring(0, 10) + ".." : betDisplay;
+    ctx.fillText(shortBet, width - 55, 133);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+    ctx.fillRect(0, height - 22, width, 22);
+    ctx.fillStyle = "rgba(212, 175, 55, 0.5)";
+    ctx.font = "8px 'Courier New'";
+    ctx.fillText("HEDGEHOG SIC BO • PREMIUM • SINCE 2025", width / 2 - 155, height - 8);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.fillText("CASINO", width - 85, height - 8);
+
     return canvas.toBuffer();
 }
 
 module.exports = {
     config: {
         name: "sicbo",
-        version: "4.0",
-        author: "Itachi Soma (BigInt + API cash)",
+        version: "5.0",
+        author: "Itachi Soma",
         countDown: 3,
         role: 0,
         category: "fun"
@@ -273,48 +332,31 @@ module.exports = {
         }
         const userBank = bankData[senderID] || { bank: 0, imageMode: true };
         const username = await getUserName(senderID, api);
+        const avatarUrl = await getUserAvatar(senderID, api);
 
         if (!subCommand || subCommand === "help") {
-            return message.reply(
-`𝐒𝐈𝐂 𝐁𝐎 - 𝐋𝐄 𝐉𝐄𝐔 𝐃𝐄𝐒 𝟑 𝐃𝐄́𝐒
-━━━━━━━━━━━━━━━━
-⚙️ 𝐂𝐨𝐦𝐦𝐚𝐧𝐝𝐞𝐬 ⚙️
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐛𝐚𝐥𝐚𝐧𝐜𝐞
-   → 𝐕𝐨𝐢𝐫 𝐭𝐨𝐧 𝐬𝐨𝐥𝐝𝐞
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐩𝐞𝐭𝐢𝐭 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭>
-   → 𝐓𝐨𝐭𝐚𝐥 𝟒-𝟏𝟎 (𝐡𝐨𝐫𝐬 𝐭𝐫𝐢𝐩𝐥𝐞) → 𝐆𝐚𝐢𝐧 𝐱𝟑
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐠𝐫𝐚𝐧𝐝 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭>
-   → 𝐓𝐨𝐭𝐚𝐥 𝟏𝟏-𝟏𝟕 (𝐡𝐨𝐫𝐬 𝐭𝐫𝐢𝐩𝐥𝐞) → 𝐆𝐚𝐢𝐧 𝐱𝟑
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐭𝐨𝐭𝐚𝐥 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭> <𝟒-𝟏𝟕>
-   → 𝐒𝐨𝐦𝐦𝐞 𝐞𝐱𝐚𝐜𝐭𝐞 → 𝐆𝐚𝐢𝐧 𝐱𝟔 𝐚̀ 𝐱𝟔𝟎
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐭𝐫𝐢𝐩𝐥𝐞 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭> [𝟏-𝟔/𝐚𝐧𝐲]
-   → 𝟑 𝐝𝐞́𝐬 𝐢𝐝𝐞𝐧𝐭𝐢𝐪𝐮𝐞𝐬 → 𝐆𝐚𝐢𝐧 𝐱𝟑𝟎 𝐨𝐮 𝐱𝟏𝟖𝟎
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐝𝐨𝐮𝐛𝐥𝐞 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭> [𝟏-𝟔/𝐚𝐧𝐲]
-   → 𝐀𝐮 𝐦𝐨𝐢𝐧𝐬 𝟐 𝐝𝐞́𝐬 𝐢𝐝𝐞𝐧𝐭𝐢𝐪𝐮𝐞𝐬 → 𝐆𝐚𝐢𝐧 𝐱𝟏𝟎 𝐨𝐮 𝐱𝟏𝟏
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐬𝐢𝐦𝐩𝐥𝐞 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭> <𝟏-𝟔>
-   → 𝐔𝐧 𝐝𝐞́ 𝐦𝐨𝐧𝐭𝐫𝐞 𝐜𝐞 𝐧𝐮𝐦𝐞́𝐫𝐨 → 𝐆𝐚𝐢𝐧 𝐱𝟑
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐜𝐨𝐦𝐛𝐨 <𝐦𝐨𝐧𝐭𝐚𝐧𝐭> <𝟏-𝟔> <𝟏-𝟔>
-   → 𝐋𝐞𝐬 𝟐 𝐧𝐮𝐦𝐞́𝐫𝐨𝐬 𝐬𝐨𝐫𝐭𝐞𝐧𝐭 → 𝐆𝐚𝐢𝐧 𝐱𝟕
-
-🎲 𝐬𝐢𝐜𝐛𝐨 𝐛𝐨𝐧𝐮𝐬
-   → +𝟐𝟎𝟎$ 𝐩𝐚𝐫 𝐣𝐨𝐮𝐫
-
-━━━━━━━━━━━━━━━━
-📋 𝐓𝐨𝐧 𝐬𝐨𝐥𝐝𝐞 : ${await formatNumber(userMoney)}$
-━━━━━━━━━━━━━━━━`
-            );
+            return message.reply(formatStyledMessage([
+                "🎲 SIC BO - LE JEU DES 3 DÉS",
+                "━━━━━━━━━━━━━━━━",
+                "⚙️ COMMANDES ⚙️",
+                "",
+                "🎲 sicbo balance",
+                "🎲 sicbo petit <montant>",
+                "🎲 sicbo grand <montant>",
+                "🎲 sicbo total <montant> <4-17>",
+                "🎲 sicbo triple <montant> [1-6/any]",
+                "🎲 sicbo double <montant> [1-6/any]",
+                "🎲 sicbo simple <montant> <1-6>",
+                "🎲 sicbo combo <montant> <1-6> <1-6>",
+                "🎲 sicbo bonus",
+                "",
+                "━━━━━━━━━━━━━━━━",
+                `📋 Ton solde : ${await formatNumber(userMoney)}$`
+            ]));
         }
 
         if (subCommand === "balance" || subCommand === "solde") {
-            return message.reply(`📋 𝐂𝐚𝐩𝐢𝐭𝐚𝐥 𝐚𝐜𝐭𝐮𝐞𝐥: ${await formatNumber(userMoney)}$`);
+            return message.reply(formatStyledMessage([`📋 Capital actuel: ${await formatNumber(userMoney)}$`]));
         }
 
         if (subCommand === "bonus") {
@@ -326,49 +368,54 @@ module.exports = {
 
             if (now - lastBonus < dayMs) {
                 const remaining = Math.ceil((dayMs - (now - lastBonus)) / 3600000);
-                return message.reply(`𝐁𝐨𝐧𝐮𝐬 𝐝𝐞𝐣𝐚̀ 𝐫𝐞𝐜𝐮 !\n⏳ 𝐏𝐫𝐨𝐜𝐡𝐚𝐢𝐧 𝐛𝐨𝐧𝐮𝐬 𝐝𝐚𝐧𝐬 ${remaining}𝐡`);
+                return message.reply(formatStyledMessage([`🎁 Bonus déjà reçu !`, `⏳ Prochain bonus dans ${remaining}h`]));
             }
 
             await updateUserCash(senderID, 200n);
             const newBalance = await getUserCash(senderID);
             if (usersData) await usersData.set(senderID, { lastBonus: now });
-            return message.reply(`🎁 𝐁𝐨𝐧𝐮𝐬 𝐪𝐮𝐨𝐭𝐢𝐝𝐢𝐞𝐧 !\n━━━━━━━━━━━━━━━━\n✨ +𝟐𝟎𝟎$\n💰 𝐍𝐨𝐮𝐯𝐞𝐚𝐮 𝐬𝐨𝐥𝐝𝐞 : ${await formatNumber(newBalance)}$`);
+            return message.reply(formatStyledMessage([
+                "🎁 BONUS QUOTIDIEN",
+                "━━━━━━━━━━━━━━━━",
+                "✨ +200$",
+                `💰 Nouveau solde : ${await formatNumber(newBalance)}$`
+            ]));
         }
 
         const betType = subCommand;
         const amount = await parseAmountWithSuffix(args[1]);
 
         if (amount <= 0n) {
-            return message.reply(`❌ 𝐌𝐨𝐧𝐭𝐚𝐧𝐭 𝐢𝐧𝐯𝐚𝐥𝐢𝐝𝐞\n\n𝐄𝐱𝐞𝐦𝐩𝐥𝐞𝐬 : 𝟓𝟎𝐤, 𝟏.𝟓𝐌, 𝟐𝐁, 𝟏𝟎𝟎𝐓`);
+            return message.reply(formatStyledMessage(["❌ Montant invalide", "", "Exemples : 50k, 1.5M, 2B, 100T"]));
         }
 
         if (amount > userMoney) {
-            return message.reply(
-`❌ 𝐅𝐨𝐧𝐝𝐬 𝐢𝐧𝐬𝐮𝐟𝐟𝐢𝐬𝐚𝐧𝐭𝐬
-━━━━━━━━━━━━━━━━
-💰 𝐓𝐨𝐧 𝐬𝐨𝐥𝐝𝐞 : ${await formatNumber(userMoney)}$
-🎲 𝐌𝐨𝐧𝐭𝐚𝐧𝐭 : ${await formatNumber(amount)}$`
-            );
+            return message.reply(formatStyledMessage([
+                "❌ Fonds insuffisants",
+                "━━━━━━━━━━━━━━━━",
+                `💰 Ton solde : ${await formatNumber(userMoney)}$`,
+                `🎲 Montant : ${await formatNumber(amount)}$`
+            ]));
         }
 
         let betValue = null;
         const validTypes = ["petit", "grand", "total", "triple", "double", "simple", "combo"];
 
         if (!validTypes.includes(betType)) {
-            return message.reply(`❌ 𝐓𝐲𝐩𝐞 𝐝𝐞 𝐩𝐚𝐫𝐢 𝐢𝐧𝐜𝐨𝐧𝐧𝐮\n\n➜ 𝐬𝐢𝐜𝐛𝐨 𝐡𝐞𝐥𝐩`);
+            return message.reply(formatStyledMessage(["❌ Type de pari inconnu", "", "➜ sicbo help"]));
         }
 
         if (betType === "total") {
             betValue = parseInt(args[2]);
             if (isNaN(betValue) || betValue < 4 || betValue > 17) {
-                return message.reply(`❌ 𝐓𝐨𝐭𝐚𝐥 𝐢𝐧𝐯𝐚𝐥𝐢𝐝𝐞 → 𝟒-𝟏𝟕`);
+                return message.reply(formatStyledMessage(["❌ Total invalide → 4-17"]));
             }
         }
 
         if (betType === "triple" || betType === "double") {
             betValue = args[2] || "any";
             if (betValue !== "any" && (parseInt(betValue) < 1 || parseInt(betValue) > 6)) {
-                return message.reply(`❌ 𝐕𝐚𝐥𝐞𝐮𝐫 𝐢𝐧𝐯𝐚𝐥𝐢𝐝𝐞 → 𝟏-𝟔 𝐨𝐮 "𝐚𝐧𝐲"`);
+                return message.reply(formatStyledMessage(["❌ Valeur invalide → 1-6 ou any"]));
             }
             if (betValue !== "any") betValue = parseInt(betValue);
         }
@@ -376,7 +423,7 @@ module.exports = {
         if (betType === "simple") {
             betValue = parseInt(args[2]);
             if (isNaN(betValue) || betValue < 1 || betValue > 6) {
-                return message.reply(`❌ 𝐕𝐚𝐥𝐞𝐮𝐫 𝐢𝐧𝐯𝐚𝐥𝐢𝐝𝐞 → 𝟏-𝟔`);
+                return message.reply(formatStyledMessage(["❌ Valeur invalide → 1-6"]));
             }
         }
 
@@ -384,7 +431,7 @@ module.exports = {
             const num1 = parseInt(args[2]);
             const num2 = parseInt(args[3]);
             if (isNaN(num1) || isNaN(num2) || num1 < 1 || num1 > 6 || num2 < 1 || num2 > 6) {
-                return message.reply(`❌ 𝐂𝐨𝐦𝐛𝐢𝐧𝐚𝐢𝐬𝐨𝐧 𝐢𝐧𝐯𝐚𝐥𝐢𝐝𝐞`);
+                return message.reply(formatStyledMessage(["❌ Combinaison invalide"]));
             }
             betValue = [num1, num2];
         }
@@ -408,7 +455,6 @@ module.exports = {
                 payout = getPayout(betType, betValue, dice);
                 winAmount = amount * BigInt(payout);
             } else {
-
                 win = false;
                 payout = 0;
                 winAmount = 0n;
@@ -422,52 +468,53 @@ module.exports = {
             await updateUserCash(senderID, winAmount);
             newBalance = await getUserCash(senderID);
         } else {
-            newBalance = await getUserCash(senderID); 
+            newBalance = await getUserCash(senderID);
         }
 
         let betDisplay = "";
-        if (betType === "total") betDisplay = `𝐓𝐨𝐭𝐚𝐥 = ${betValue}`;
-        else if (betType === "triple") betDisplay = `𝐓𝐫𝐢𝐩𝐥𝐞 ${betValue === "any" ? "𝐪𝐮𝐞𝐥𝐜𝐨𝐧𝐪𝐮𝐞" : `𝐝𝐞 ${betValue}`}`;
-        else if (betType === "double") betDisplay = `𝐃𝐨𝐮𝐛𝐥𝐞 ${betValue === "any" ? "𝐪𝐮𝐞𝐥𝐜𝐨𝐧𝐪𝐮𝐞" : `𝐝𝐞 ${betValue}`}`;
-        else if (betType === "simple") betDisplay = `𝐍𝐮𝐦𝐞́𝐫𝐨 ${betValue}`;
-        else if (betType === "combo") betDisplay = `𝐂𝐨𝐦𝐛𝐢𝐧𝐚𝐢𝐬𝐨𝐧 ${betValue[0]}+${betValue[1]}`;
-        else betDisplay = betType === "petit" ? "𝐏𝐞𝐭𝐢𝐭 (𝟒-𝟏𝟎)" : "𝐆𝐫𝐚𝐧𝐝 (𝟏𝟏-𝟏𝟕)";
+        if (betType === "total") betDisplay = `Total = ${betValue}`;
+        else if (betType === "triple") betDisplay = `Triple ${betValue === "any" ? "quelconque" : `de ${betValue}`}`;
+        else if (betType === "double") betDisplay = `Double ${betValue === "any" ? "quelconque" : `de ${betValue}`}`;
+        else if (betType === "simple") betDisplay = `Numéro ${betValue}`;
+        else if (betType === "combo") betDisplay = `Combinaison ${betValue[0]}+${betValue[1]}`;
+        else betDisplay = betType === "petit" ? "Petit (4-10)" : "Grand (11-17)";
 
         let resultMsg = "";
         if (win) {
-            resultMsg = `🎉 𝐕𝐈𝐂𝐓𝐎𝐈𝐑𝐄 ! 🎉\n━━━━━━━━━━━━━━━━\n✨ 𝐆𝐚𝐢𝐧 : +${await formatNumber(winAmount)}$ (𝐱${payout})\n💰 𝐍𝐨𝐮𝐯𝐞𝐚𝐮 𝐬𝐨𝐥𝐝𝐞 : ${await formatNumber(newBalance)}$`;
+            resultMsg = `🎉 VICTOIRE ! 🎉\n━━━━━━━━━━━━━━━━\n✨ Gain : +${await formatNumber(winAmount)}$ (x${payout})\n💰 Nouveau solde : ${await formatNumber(newBalance)}$`;
         } else {
-            resultMsg = `💀 𝐏𝐄𝐑𝐃𝐔 ... 💀\n━━━━━━━━━━━━━━━━\n📉 𝐏𝐞𝐫𝐭𝐞 : -${await formatNumber(amount)}$\n💰 𝐍𝐨𝐮𝐯𝐞𝐚𝐮 𝐬𝐨𝐥𝐝𝐞 : ${await formatNumber(newBalance)}$`;
+            resultMsg = `💀 PERDU ... 💀\n━━━━━━━━━━━━━━━━\n📉 Perte : -${await formatNumber(amount)}$\n💰 Nouveau solde : ${await formatNumber(newBalance)}$`;
         }
 
-        let tripleInfo = isTriple ? `\n━━━━━━━━━━━━━━━━\n🎲 𝐓𝐑𝐈𝐏𝐋𝐄 ! ${dice[0]} ${dice[0]} ${dice[0]}` : "";
+        let tripleInfo = isTriple ? `\n━━━━━━━━━━━━━━━━\n🎲 TRIPLE ! ${dice[0]} ${dice[0]} ${dice[0]}` : "";
 
-        await message.reply(
-`☘️ 𝐒𝐈𝐂 𝐁𝐎 - 𝐑𝐄́𝐒𝐔𝐋𝐓𝐀𝐓 ☘️
-━━━━━━━━━━━━━━━━
-🎲 𝐋𝐚𝐧𝐜𝐞𝐫 : ${diceDisplay}
-📊 𝐓𝐨𝐭𝐚𝐥 : ${sum}${tripleInfo}
-━━━━━━━━━━━━━━━━
-📋 𝐓𝐨𝐧 𝐩𝐚𝐫𝐢 : ${betDisplay}
-💰 𝐌𝐢𝐬𝐞 : ${await formatNumber(amount)}$
-📊 𝐂𝐡𝐚𝐧𝐜𝐞𝐬 : 𝟖𝟓% 𝐠𝐚𝐢𝐧 | 𝟏𝟓% 𝐩𝐞𝐫𝐭𝐞
-━━━━━━━━━━━━━━━━
-${resultMsg}
-━━━━━━━━━━━━━━━━`
-        );
+        await message.reply(formatStyledMessage([
+            "☘️ SIC BO - RÉSULTAT ☘️",
+            "━━━━━━━━━━━━━━━━",
+            `🎲 Lancer : ${diceDisplay}`,
+            `📊 Total : ${sum}${tripleInfo}`,
+            "━━━━━━━━━━━━━━━━",
+            `📋 Ton pari : ${betDisplay}`,
+            `💰 Mise : ${await formatNumber(amount)}$`,
+            "━━━━━━━━━━━━━━━━",
+            resultMsg
+        ]));
 
         if (userBank.imageMode !== false) {
             try {
-                const cardImage = await generateSicboCard(username, betDisplay, amount, win, winAmount, newBalance, dice, sum, isTriple, payout);
+                const cardImage = await generateRealisticSicboCard(
+                    username, betDisplay, amount, win, winAmount, newBalance,
+                    dice, sum, isTriple, payout, avatarUrl
+                );
                 const imgPath = `./sicbo_card_${senderID}.png`;
                 fs.writeFileSync(imgPath, cardImage);
                 await message.reply({
-                    body: "💳 𝐑𝐞𝐜𝐚𝐩𝐢𝐭𝐮𝐥𝐚𝐭𝐢𝐟 𝐬𝐮𝐫 𝐯𝐨𝐭𝐫𝐞 𝐜𝐚𝐫𝐭𝐞 𝐛𝐚𝐧𝐜𝐚𝐢𝐫𝐞 :",
+                    body: "💳 Récapitulatif sur votre carte bancaire :",
                     attachment: fs.createReadStream(imgPath)
                 });
                 fs.unlinkSync(imgPath);
             } catch (error) {
-                console.error("Erreur generation carte:", error);
+                console.error("Erreur génération carte:", error);
             }
         }
     }
