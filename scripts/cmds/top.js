@@ -4,6 +4,7 @@ const path = require("path");
 const axios = require("axios");
 
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
+const BANK_API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/parse";
 
 function toBigInt(value) {
@@ -42,12 +43,8 @@ async function formatNumber(num) {
     const bigNum = toBigInt(num);
     try {
         const response = await axios.get(`${CONVERT_API_URL}?number=${bigNum.toString()}`, { timeout: 5000 });
-        if (response.data && response.data.success && response.data.formatted) {
-            return response.data.formatted;
-        }
-    } catch (error) {
-        console.error("Convert API Error:", error.message);
-    }
+        if (response.data && response.data.success) return response.data.formatted;
+    } catch (error) {}
     return formatBigInt(bigNum);
 }
 
@@ -59,89 +56,17 @@ async function getAllUsersCash() {
         }
     } catch (error) {
         console.error("Cash API Error:", error.message);
-        
-        try {
-            const demoPath = path.join(__dirname, "top_demo.json");
-            if (fs.existsSync(demoPath)) {
-                const demoData = JSON.parse(fs.readFileSync(demoPath, "utf8"));
-                return demoData;
-            }
-        } catch (e) {}
     }
     return [];
 }
 
-async function generateTopImage(users, page, totalPages) {
-    const canvas = createCanvas(600, 500);
-    const ctx = canvas.getContext("2d");
-
-    const gradient = ctx.createLinearGradient(0, 0, 600, 500);
-    gradient.addColorStop(0, "#1a1a2e");
-    gradient.addColorStop(0.5, "#16213e");
-    gradient.addColorStop(1, "#0f3460");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 600, 500);
-
-    ctx.strokeStyle = "#d4af37";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(10, 10, 580, 480);
-
-    ctx.fillStyle = "#d4af37";
-    ctx.font = "bold 24px 'Segoe UI', 'Arial'";
-    ctx.fillText("🏆 CLASSEMENT DES RICHES 🏆", 150, 55);
-
-    ctx.fillStyle = "#ffd700";
-    ctx.font = "14px 'Segoe UI', 'Arial'";
-    ctx.fillText(`Page ${page}/${totalPages}`, 480, 85);
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 14px 'Segoe UI', 'Arial'";
-    ctx.fillText("RANG", 30, 120);
-    ctx.fillText("NOM", 100, 120);
-    ctx.textAlign = "right";
-    ctx.fillText("MONTANT", 560, 120);
-    ctx.textAlign = "left";
-
-    ctx.fillStyle = "rgba(212, 175, 55, 0.3)";
-    ctx.fillRect(20, 130, 560, 2);
-
-    let y = 155;
-    for (let i = 0; i < users.length; i++) {
-        const user = users[i];
-        const rank = (page - 1) * 10 + i + 1;
-        const name = user.name || `User_${String(user.userId).slice(-5)}`;
-        const cash = user.formattedCash;
-
-        if (rank === 1) ctx.fillStyle = "#ffd700";
-        else if (rank === 2) ctx.fillStyle = "#c0c0c0";
-        else if (rank === 3) ctx.fillStyle = "#cd7f32";
-        else ctx.fillStyle = "#fff";
-
-        ctx.font = "bold 14px 'Segoe UI', 'Arial'";
-        ctx.fillText(`${rank}.`, 30, y);
-
-        const displayName = name.length > 28 ? name.substring(0, 25) + "..." : name;
-        ctx.fillText(displayName, 100, y);
-
-        ctx.textAlign = "right";
-        ctx.fillText(cash, 560, y);
-        ctx.textAlign = "left";
-
-        y += 30;
-        if (y > 450) break;
+async function getAvatarUrl(uid, api) {
+    try {
+        const info = await api.getUserInfo(uid);
+        return info[uid]?.thumbSrc || `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
+    } catch(e) {
+        return `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
     }
-
-    ctx.fillStyle = "#d4af37";
-    ctx.font = "12px 'Segoe UI', 'Arial'";
-    ctx.fillText("💰 Hedgehog Bank - Les plus riches", 180, 480);
-
-    const date = new Date();
-    const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.font = "10px 'Segoe UI', 'Arial'";
-    ctx.fillText(dateStr, 500, 480);
-
-    return canvas.toBuffer();
 }
 
 function formatStyledMessage(contentLines) {
@@ -153,14 +78,124 @@ function formatStyledMessage(contentLines) {
     return msg;
 }
 
+async function generateTopImage(users, page, totalPages, avatars) {
+    const canvas = createCanvas(700, 600);
+    const ctx = canvas.getContext("2d");
+
+    const gradient = ctx.createLinearGradient(0, 0, 700, 600);
+    gradient.addColorStop(0, "#1a1a2e");
+    gradient.addColorStop(0.5, "#16213e");
+    gradient.addColorStop(1, "#0f3460");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 700, 600);
+
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, 680, 580);
+
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 24px 'Segoe UI', 'Arial'";
+    ctx.fillText("🏆 CLASSEMENT DES RICHES 🏆", 200, 55);
+
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "14px 'Segoe UI', 'Arial'";
+    ctx.fillText(`Page ${page}/${totalPages}`, 580, 85);
+
+    for (let i = 0; i < 3 && i < users.length; i++) {
+        const user = users[i];
+        const rank = (page - 1) * 10 + i + 1;
+        const x = 30 + (i * 220);
+        const y = 120;
+
+        ctx.fillStyle = "#d4af37";
+        ctx.font = "bold 18px 'Segoe UI', 'Arial'";
+        ctx.fillText(`#${rank}`, x + 60, y + 30);
+
+        if (avatars[user.userId]) {
+            try {
+                const avatar = await loadImage(avatars[user.userId]);
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x + 65, y + 85, 40, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(avatar, x + 25, y + 45, 80, 80);
+                ctx.restore();
+                ctx.beginPath();
+                ctx.arc(x + 65, y + 85, 42, 0, Math.PI * 2);
+                ctx.strokeStyle = rank === 1 ? "#ffd700" : (rank === 2 ? "#c0c0c0" : "#cd7f32");
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            } catch(e) {}
+        }
+
+        ctx.fillStyle = rank === 1 ? "#ffd700" : (rank === 2 ? "#c0c0c0" : "#cd7f32");
+        ctx.font = "bold 14px 'Segoe UI', 'Arial'";
+        const name = user.name.length > 18 ? user.name.substring(0, 15) + "..." : user.name;
+        ctx.fillText(name, x + 20, y + 155);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px 'Segoe UI', 'Arial'";
+        ctx.fillText(user.formattedCash, x + 20, y + 180);
+    }
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 14px 'Segoe UI', 'Arial'";
+    ctx.fillText("RANG", 30, 280);
+    ctx.fillText("NOM", 100, 280);
+    ctx.textAlign = "right";
+    ctx.fillText("MONTANT", 660, 280);
+    ctx.textAlign = "left";
+
+    ctx.fillStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.fillRect(20, 290, 660, 2);
+
+    let y = 320;
+    for (let i = 3; i < users.length; i++) {
+        const user = users[i];
+        const rank = (page - 1) * 10 + i + 1;
+
+        if (rank % 2 === 0) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+            ctx.fillRect(20, y - 22, 660, 25);
+        }
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "13px 'Segoe UI', 'Arial'";
+        ctx.fillText(`${rank}.`, 30, y);
+
+        const name = user.name.length > 25 ? user.name.substring(0, 22) + "..." : user.name;
+        ctx.fillText(name, 100, y);
+
+        ctx.textAlign = "right";
+        ctx.fillText(user.formattedCash, 660, y);
+        ctx.textAlign = "left";
+
+        y += 28;
+        if (y > 560) break;
+    }
+
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "12px 'Segoe UI', 'Arial'";
+    ctx.fillText("💰 Hedgehog Bank - Les plus riches", 220, 580);
+
+    const date = new Date();
+    const dateStr = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "10px 'Segoe UI', 'Arial'";
+    ctx.fillText(dateStr, 600, 580);
+
+    return canvas.toBuffer();
+}
+
 module.exports = {
     config: {
         name: "top",
-        version: "2.1",
+        version: "3.0",
         author: "Ismael Soma",
         role: 0,
-        shortDescription: { en: "Top 50 richest users" },
-        longDescription: { en: "Displays the top 50 richest users with real names and image" },
+        shortDescription: { en: "Top richest users" },
+        longDescription: { en: "Displays the top 50 richest users with avatars and real names" },
         category: "economy",
         guide: { en: "{pn} [page]" }
     },
@@ -171,7 +206,13 @@ module.exports = {
         if (allUsers.length === 0) {
             return message.reply(formatStyledMessage([
                 "📊 CLASSEMENT INDISPONIBLE",
-                "━━━━━━━━━━━━━━━━━",
+                "━━━━━━━━━━━━━━━━━━",
+                "❌ L'API Cash est actuellement",
+                "   indisponible ou vide.",
+                "",
+                "💡 Utilisez `bank deposit` pour",
+                "   commencer à gagner de l'argent !",
+                "",
                 "🔄 Réessaie plus tard."
             ]));
         }
@@ -188,7 +229,9 @@ module.exports = {
         const endIndex = startIndex + usersPerPage;
         const usersOnPage = allUsers.slice(startIndex, endIndex);
 
+        const avatars = {};
         const enrichedUsers = [];
+
         for (const user of usersOnPage) {
             try {
                 let name = `User_${String(user.userId).slice(-5)}`;
@@ -201,7 +244,11 @@ module.exports = {
                         }
                     }
                 } catch (nameErr) {}
-                
+
+                if (!avatars[user.userId]) {
+                    avatars[user.userId] = await getAvatarUrl(user.userId, api);
+                }
+
                 const cashAmount = toBigInt(user.cash || 0);
                 const formattedCash = await formatNumber(cashAmount);
                 enrichedUsers.push({
@@ -229,10 +276,10 @@ module.exports = {
         }
         textMsg += `━━━━━━━━━━━━━━━━━━\n📜 Page ${page}/${totalPages}`;
 
-        await message.reply(formatStyledMessage(textMsg.split('\n')));
+        await message.reply(textMsg);
 
         try {
-            const img = await generateTopImage(enrichedUsers, page, totalPages);
+            const img = await generateTopImage(enrichedUsers, page, totalPages, avatars);
             const imgPath = path.join(__dirname, `top_${Date.now()}.png`);
             fs.writeFileSync(imgPath, img);
             await message.reply({
