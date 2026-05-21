@@ -1,14 +1,14 @@
-const fs   = require("fs");
+const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const { createCanvas, loadImage } = require("canvas");
 
-const API_URL      = "https://hedgehog-bank-api.vercel.app/api/bank";
-const CONVERT_URL  = "https://numbers-conversion.vercel.app/api/parse";
-const CASH_URL     = "https://cash-api-five.vercel.app/api/cash";
-const BOT_ADMIN    = "61589149033077";
+const API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
+const CONVERT_URL = "https://numbers-conversion.vercel.app/api/parse";
+const CASH_URL = "https://cash-api-five.vercel.app/api/cash";
+const BOT_ADMIN = "61589149033077";
 
-const VIP_FILE     = path.join(__dirname, "bank_vips.json");
+const VIP_FILE = path.join(__dirname, "bank_vips.json");
 const PENDING_FILE = path.join(__dirname, "bank_pending.json");
 
 let vipList = [];
@@ -22,17 +22,20 @@ function savePending() { try { fs.writeFileSync(PENDING_FILE, JSON.stringify(Obj
 
 function toBigInt(v) {
     if (typeof v === "bigint") return v;
-    if (!v && v !== 0) return 0n;
-    try { return BigInt(String(v).split(".")[0].replace(/[^0-9\-]/g, "") || "0"); }
-    catch { return 0n; }
+    if (v === undefined || v === null) return 0n;
+    try {
+        const clean = String(v).split(".")[0].replace(/[^0-9\-]/g, "") || "0";
+        return BigInt(clean);
+    } catch { return 0n; }
 }
 
 function formatBigInt(num) {
     num = toBigInt(num);
     if (num < 0n) return "-" + formatBigInt(-num);
     if (num === 0n) return "0";
+    if (num > 10n ** 260n) return "∞";
     const tiers = [
-        { v: 10n**33n, s: "Dc" }, { v: 10n**30n, s: "No" }, { v: 10n**27n, s: "Oc" },
+        { v: 10n**48n, s: "Qu" }, { v: 10n**45n, s: "Qo" }, { v: 10n**42n, s: "Qs" }, { v: 10n**39n, s: "Dz" }, { v: 10n**36n, s: "Dq" }, { v: 10n**33n, s: "Dc" }, { v: 10n**30n, s: "No" }, { v: 10n**27n, s: "Oc" },
         { v: 10n**24n, s: "Sp" }, { v: 10n**21n, s: "Sx" }, { v: 10n**18n, s: "Qi" },
         { v: 10n**15n, s: "Qa" }, { v: 10n**12n, s: "T"  }, { v: 10n**9n,  s: "B"  },
         { v: 10n**6n,  s: "M"  }, { v: 10n**3n,  s: "k"  },
@@ -41,7 +44,11 @@ function formatBigInt(num) {
         if (num >= v) {
             const int = num / v;
             const dec = (num % v) * 10n / v;
-            return dec > 0n ? `${int}.${dec}${s}` : `${int}${s}`;
+            if (dec > 0n) {
+                if (int > 10n) return `${int}${s}`;
+                return `${int}.${dec}${s}`;
+            }
+            return `${int}${s}`;
         }
     }
     return num.toString();
@@ -49,6 +56,7 @@ function formatBigInt(num) {
 
 async function formatNumber(num) {
     const big = toBigInt(num);
+    if (big > 10n ** 260n) return "∞";
     try {
         const r = await axios.get(`${CONVERT_URL}?number=${big.toString()}`, { timeout: 3000 });
         if (r.data?.success && r.data.formatted) return r.data.formatted;
@@ -68,7 +76,7 @@ async function addCash(userId, amount) {
     const a = toBigInt(amount);
     try {
         if (a >= 0n) await axios.post(`${CASH_URL}/${userId}/add`, { amount: a.toString() });
-        else          await axios.post(`${CASH_URL}/${userId}/subtract`, { amount: (-a).toString() });
+        else await axios.post(`${CASH_URL}/${userId}/subtract`, { amount: (-a).toString() });
     } catch(e) { console.error("Cash API:", e.message); }
 }
 
@@ -135,16 +143,16 @@ function S(lines) {
 
 async function drawCard(ctx, width, height, theme = "dark") {
     const themes = {
-        dark:   ["#0d0d1a", "#1a1035", "#0a0a2e"],
-        gold:   ["#1a1200", "#2a1f00", "#1a1000"],
-        green:  ["#001a0d", "#00260f", "#001508"],
+        dark: ["#0d0d1a", "#1a1035", "#0a0a2e"],
+        gold: ["#1a1200", "#2a1f00", "#1a1000"],
+        green: ["#001a0d", "#00260f", "#001508"],
         purple: ["#0d001a", "#1a0035", "#0a002e"],
     };
     const cols = themes[theme] || themes.dark;
     const bg = ctx.createLinearGradient(0, 0, width, height);
-    bg.addColorStop(0,   cols[0]);
+    bg.addColorStop(0, cols[0]);
     bg.addColorStop(0.5, cols[1]);
-    bg.addColorStop(1,   cols[2]);
+    bg.addColorStop(1, cols[2]);
     ctx.fillStyle = bg;
 
     const r = 22;
@@ -188,7 +196,7 @@ async function generateBankCard(opts = {}) {
 
     const W = 640, H = 385;
     const canvas = createCanvas(W, H);
-    const ctx    = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
 
     await drawCard(ctx, W, H, theme);
 
@@ -234,8 +242,8 @@ async function generateBankCard(opts = {}) {
     ctx.fill();
     ctx.strokeStyle = "#a88010";
     ctx.lineWidth = 0.8;
-    [[28,107,80,107],[28,117,80,117],[28,127,80,127],[44,98,44,136],[58,98,58,136]].forEach(([x1,y1,x2,y2]) => {
-        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    [[28,107,80,107], [28,117,80,117], [28,127,80,127], [44,98,44,136], [58,98,58,136]].forEach(([x1, y1, x2, y2]) => {
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     });
     ctx.fillStyle = "#e8c020";
     ctx.fillRect(44, 107, 14, 20);
@@ -306,7 +314,7 @@ async function generateBankCard(opts = {}) {
     ctx.fillStyle = "rgba(212,175,55,0.4)";
     ctx.font = "8px 'Courier New'";
     const d = new Date();
-    ctx.fillText(`HEDGEHOG BANK • PREMIUM • ${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`, W/2 - 145, H - 6);
+    ctx.fillText(`HEDGEHOG BANK • PREMIUM • ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`, W / 2 - 145, H - 6);
 
     return canvas.toBuffer("image/png");
 }
@@ -315,7 +323,7 @@ async function generateCasinoCard(opts = {}) {
     const { username = "USER", win = false, choice = "", result = "", amount = "0", winAmount = "0", balance = "0", mode = "gamble" } = opts;
     const W = 640, H = 360;
     const canvas = createCanvas(W, H);
-    const ctx    = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d");
 
     const bg = ctx.createLinearGradient(0, 0, W, H);
     bg.addColorStop(0, "#0d0005");
@@ -328,7 +336,7 @@ async function generateCasinoCard(opts = {}) {
 
     ctx.fillStyle = "rgba(0,80,30,0.15)";
     ctx.beginPath();
-    ctx.ellipse(W/2, H/2, W*0.45, H*0.35, 0, 0, Math.PI*2);
+    ctx.ellipse(W / 2, H / 2, W * 0.45, H * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "rgba(0,120,50,0.3)";
     ctx.lineWidth = 2;
@@ -337,7 +345,7 @@ async function generateCasinoCard(opts = {}) {
     ctx.strokeStyle = win ? "#00ff88" : "#ff4444";
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.roundRect(6, 6, W-12, H-12, 14);
+    ctx.roundRect(6, 6, W - 12, H - 12, 14);
     ctx.stroke();
 
     ctx.fillStyle = "#d4af37";
@@ -356,10 +364,10 @@ async function generateCasinoCard(opts = {}) {
     ctx.fillText("JOUEUR", 28, 103);
 
     if (mode === "gamble") {
-        const coinX = W/2, coinY = H/2 - 10;
+        const coinX = W / 2, coinY = H / 2 - 10;
         ctx.fillStyle = result === "pile" ? "#d4af37" : "#c0c0c0";
         ctx.beginPath();
-        ctx.arc(coinX, coinY, 45, 0, Math.PI*2);
+        ctx.arc(coinX, coinY, 45, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = result === "pile" ? "#a08010" : "#909090";
         ctx.lineWidth = 3;
@@ -394,7 +402,7 @@ async function generateCasinoCard(opts = {}) {
     const d = new Date();
     ctx.fillStyle = "rgba(255,255,255,0.2)";
     ctx.font = "8px 'Courier New'";
-    ctx.fillText(`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`, W - 100, H - 10);
+    ctx.fillText(`${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`, W - 100, H - 10);
 
     return canvas.toBuffer("image/png");
 }
@@ -403,7 +411,7 @@ async function sendWithCard(message, bodyLines, cardOpts, imageMode) {
     const body = S(bodyLines);
     if (!imageMode) return message.reply(body);
     try {
-        const img     = await generateBankCard(cardOpts);
+        const img = await generateBankCard(cardOpts);
         const imgPath = path.join(__dirname, `bank_tmp_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
         fs.writeFileSync(imgPath, img);
         await message.reply({ body, attachment: fs.createReadStream(imgPath) });
@@ -418,7 +426,7 @@ async function sendWithCasino(message, bodyLines, casinoOpts, imageMode) {
     const body = S(bodyLines);
     if (!imageMode) return message.reply(body);
     try {
-        const img     = await generateCasinoCard(casinoOpts);
+        const img = await generateCasinoCard(casinoOpts);
         const imgPath = path.join(__dirname, `casino_tmp_${Date.now()}.png`);
         fs.writeFileSync(imgPath, img);
         await message.reply({ body, attachment: fs.createReadStream(imgPath) });
@@ -442,13 +450,13 @@ module.exports = {
 
     onStart: async function ({ args, message, event, api }) {
         const { getPrefix } = global.utils;
-        const p        = getPrefix(event.threadID);
-        const user     = String(event.senderID);
+        const p = getPrefix(event.threadID);
+        const user = String(event.senderID);
         const infoResp = await api.getUserInfo(user);
         const username = infoResp[user]?.name || "Utilisateur";
-        const isVip    = vipList.includes(user);
+        const isVip = vipList.includes(user);
 
-        let bankRes  = await apiCall(`/${user}`);
+        let bankRes = await apiCall(`/${user}`);
         let bankData = bankRes.success ? bankRes.data : { bank: "0", card: null };
         const imageMode = bankData.imageMode !== false;
 
@@ -472,11 +480,11 @@ module.exports = {
             } catch(e) {}
             const str = String(input).toLowerCase().trim();
             const SFX = {
-                k:1000n, m:1000000n, b:1000000000n, t:1000000000000n,
-                q:1000000000000000n, Q:1000000000000000000n,
-                s:1000000000000000000000n, S:1000000000000000000000000n,
-                o:1000000000000000000000000000n, n:1000000000000000000000000000000n,
-                d:1000000000000000000000000000000000n
+                k: 1000n, m: 1000000n, b: 1000000000n, t: 1000000000000n,
+                q: 1000000000000000n, Q: 1000000000000000000n,
+                s: 1000000000000000000000n, S: 1000000000000000000000000n,
+                o: 1000000000000000000000000000n, n: 1000000000000000000000000000000n,
+                d: 1000000000000000000000000000000000n
             };
             const m = str.match(/^(\d+(?:\.\d+)?)([a-zA-Z]?)$/);
             if (!m) return toBigInt(str);
@@ -554,286 +562,286 @@ module.exports = {
 
         switch (cmd) {
 
-        case "deposit": {
-            const amount = await parseAmount(args[1]);
-            if (amount <= 0n) return message.reply(S(["❌ Montant invalide.", `📝 ${p}bank deposit <montant>`]));
-            if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte`, `📝 ${p}bank card`]));
-            const cash = await getCash(user);
-            if (amount > cash) return message.reply(S(["❌ Solde cash insuffisant.", `💰 Poche : ${await formatNumber(cash)}$`, `🎯 Montant : ${await formatNumber(amount)}$`]));
-            setPending(user, { amount: amount.toString(), type: "deposit" }, () => message.reply(S(["⏰ Transaction expirée."])));
-            return message.reply(S([`💳 Dépôt de ${await formatNumber(amount)}$`, "---", "🔐 Entrez votre CVV pour confirmer", "📝 Exemple : bank 123", "⏰ 20 secondes"]));
-        }
-
-        case "withdraw": {
-            const amount = await parseAmount(args[1]);
-            if (amount <= 0n) return message.reply(S(["❌ Montant invalide.", `📝 ${p}bank withdraw <montant>`]));
-            if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte.`]));
-            if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde bancaire insuffisant.", `💰 Banque : ${await formatNumber(bankData.bank)}$`]));
-            setPending(user, { amount: amount.toString(), type: "withdraw" }, () => message.reply(S(["⏰ Transaction expirée."])));
-            return message.reply(S([`💳 Retrait de ${await formatNumber(amount)}$`, "---", "🔐 Entrez votre CVV pour confirmer", "⏰ 20 secondes"]));
-        }
-
-        case "balance":
-        case "show": {
-            const cash = await getCash(user);
-            const bal  = toBigInt(bankData.bank);
-            const avatarUrl = await getAvatar(user);
-            await sendWithCard(message,
-                ["💰 VOS SOLDES", "---", `🏦 Banque : ${await formatNumber(bal)}$`, `💵 Poche  : ${await formatNumber(cash)}$`, isVip ? "⭐ Statut : VIP" : "👤 Statut : Standard"],
-                { title: "BALANCE", balance: await formatNumber(bal), username, cardData: bankData.card, avatarUrl, subtitle: `Poche: ${await formatNumber(cash)}$`, theme: "dark" },
-                imageMode
-            );
-            break;
-        }
-
-        case "card": {
-            const r = await apiCall(`/${user}/card`, "POST");
-            if (!r.success) return message.reply(S([`❌ ${r.error || "Erreur création carte"}`]));
-            const c = r.data;
-            bankData.card = c;
-            const avatarUrl = await getAvatar(user);
-            await sendWithCard(message,
-                ["💳 VOTRE CARTE BANCAIRE", "---", `🏦 N° : ${c.cardNumber}`, `📅 Exp : ${c.cardExpiry}`, `🔐 CVV : ${c.cardCvv}`, "---", "⚠️ Gardez votre CVV secret !"],
-                { title: "MY CARD", balance: await formatNumber(toBigInt(bankData.bank)), username, cardData: c, cvv: c.cardCvv, avatarUrl, theme: "gold" },
-                imageMode
-            );
-            break;
-        }
-
-        case "transfer":
-        case "send": {
-            const targetId = Object.keys(event.mentions)[0] || args[1];
-            const amount   = await parseAmount(args[2]);
-            if (!targetId || targetId === user) return message.reply(S(["❌ Cible invalide.", `📝 ${p}bank transfer @mention <montant>`]));
-            if (amount <= 0n) return message.reply(S(["❌ Montant invalide."]));
-            if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte.`]));
-            if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde insuffisant."]));
-            const targetName = await getName(targetId);
-            setPending(user, { amount: amount.toString(), type: "transfer", targetId, targetName }, () => message.reply(S(["⏰ Transfert expiré."])));
-            return message.reply(S([`💸 Transfert de ${await formatNumber(amount)}$`, `🎯 Vers : ${targetName}`, "---", "🔐 Entrez votre CVV pour confirmer", "⏰ 20 secondes"]));
-        }
-
-        case "interest": {
-            if (toBigInt(bankData.bank) <= 0n) return message.reply(S(["❌ Pas d'argent en banque."]));
-            const r = await apiCall(`/${user}/interest`, "POST");
-            if (!r.success) return message.reply(S([`❌ ${r.error}`]));
-            bankData = (await apiCall(`/${user}`)).data || bankData;
-            const earned = toBigInt(r.interestEarned);
-            const avatarUrl = await getAvatar(user);
-            await sendWithCard(message,
-                ["📈 Intérêts crédités !", "---", `✨ Gain : +${await formatNumber(earned)}$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`],
-                { title: "INTEREST", balance: await formatNumber(bankData.bank), username, cardData: bankData.card, avatarUrl, subtitle: `+ ${await formatNumber(earned)}$`, theme: "green" },
-                imageMode
-            );
-            break;
-        }
-
-        case "top":
-        case "richest": {
-            const r = await apiCall("/top");
-            if (!r.success || !r.data?.length)
-                return message.reply(S(["👑 Classement vide.", "Faites bank card pour commencer !"]));
-            const medals = ["🥇","🥈","🥉"];
-            const lines  = ["👑 TOP BANQUE", "---"];
-            for (let i = 0; i < Math.min(r.data.length, 15); i++) {
-                const u    = r.data[i];
-                const name = await getName(u.userId);
-                const bal  = await formatNumber(u.bank || "0");
-                lines.push(`${medals[i] || `${i+1}.`} ${name}`);
-                lines.push(`   💰 ${bal}$`);
+            case "deposit": {
+                const amount = await parseAmount(args[1]);
+                if (amount <= 0n) return message.reply(S(["❌ Montant invalide.", `📝 ${p}bank deposit <montant>`]));
+                if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte`, `📝 ${p}bank card`]));
+                const cash = await getCash(user);
+                if (amount > cash) return message.reply(S(["❌ Solde cash insuffisant.", `💰 Poche : ${await formatNumber(cash)}$`, `🎯 Montant : ${await formatNumber(amount)}$`]));
+                setPending(user, { amount: amount.toString(), type: "deposit" }, () => message.reply(S(["⏰ Transaction expirée."])));
+                return message.reply(S([`💳 Dépôt de ${await formatNumber(amount)}$`, "---", "🔐 Entrez votre CVV pour confirmer", "📝 Exemple : bank 123", "⏰ 20 secondes"]));
             }
-            return message.reply(S(lines));
-        }
 
-        case "gamble":
-        case "bet": {
-            const sub = args[1]?.toLowerCase();
-            if (!sub || sub === "help")
-                return message.reply(S(["🎰 GAMBLE — PILE OU FACE", "---", `📝 ${p}bank gamble play <montant> <pile/face>`]));
-            if (sub !== "play") break;
-            const amount = await parseAmount(args[2]);
-            const choice = args[3]?.toLowerCase();
-            if (amount <= 0n) return message.reply(S(["❌ Montant invalide."]));
-            if (!["pile","face"].includes(choice)) return message.reply(S(["❌ Choisissez pile ou face."]));
-            if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde insuffisant."]));
-            const r = await apiCall(`/${user}/gamble`, "POST", { amount: amount.toString(), choice });
-            if (!r.success) return message.reply(S([`❌ ${r.error}`]));
-            bankData = (await apiCall(`/${user}`)).data || bankData;
-            const { win, result, winAmount } = r;
-            const winBig = toBigInt(winAmount);
-            await sendWithCasino(message,
-                [win ? "🎉 VICTOIRE AU GAMBLE !" : "💀 PERDU AU GAMBLE", "---",
-                 `🪙 Votre choix : ${choice.toUpperCase()}`,
-                 `🎲 Résultat : ${result.toUpperCase()}`,
-                 win ? `✨ Gain : +${await formatNumber(winBig)}$` : `📉 Perte : -${await formatNumber(amount)}$`,
-                 `💰 Solde : ${await formatNumber(bankData.bank)}$`],
-                { username, win, choice, result, amount: await formatNumber(amount), winAmount: await formatNumber(winBig), balance: await formatNumber(bankData.bank), mode: "gamble" },
-                imageMode
-            );
-            break;
-        }
-
-        case "lottery": {
-            const sub = args[1]?.toLowerCase();
-            if (!sub || sub === "help")
-                return message.reply(S(["🎲 LOTERIE", "---", `📝 ${p}bank lottery play <montant>`, "🎁 Gains : x2 (2/3), x10 (3/3), x100 (jackpot)"]));
-            if (sub !== "play") break;
-            const ticket = await parseAmount(args[2]);
-            if (ticket <= 0n) return message.reply(S(["❌ Montant invalide."]));
-            const cash = await getCash(user);
-            if (ticket > cash) return message.reply(S(["❌ Solde cash insuffisant.", `💰 Poche : ${await formatNumber(cash)}$`]));
-            const r = await apiCall(`/${user}/lottery`, "POST", { ticketPrice: ticket.toString() });
-            if (!r.success) return message.reply(S([`❌ ${r.error}`]));
-            const netChange = r.win ? toBigInt(r.winAmount) - ticket : -ticket;
-            await addCash(user, netChange);
-            bankData = (await apiCall(`/${user}`)).data || bankData;
-            const winBig = toBigInt(r.winAmount || "0");
-            await sendWithCasino(message,
-                [r.win ? "🎉 VICTOIRE À LA LOTERIE !" : "💀 PERDU À LA LOTERIE", "---",
-                 `🔢 Vos numéros : ${r.userNumbers?.join(" - ")}`,
-                 `🎲 Tirés : ${r.drawnNumbers?.join(" - ")}`,
-                 `✅ Correspondances : ${r.matchCount}/3`,
-                 r.win ? `✨ Gain : +${await formatNumber(winBig)}$ (x${r.multiplier})` : `📉 Perte : -${await formatNumber(ticket)}$`],
-                { username, win: r.win, amount: await formatNumber(ticket), winAmount: await formatNumber(winBig), balance: await formatNumber(bankData.bank), mode: "lottery" },
-                imageMode
-            );
-            break;
-        }
-
-        case "parrainage":
-        case "parrain": {
-            const sub = args[1]?.toLowerCase();
-            if (!sub || sub === "help")
-                return message.reply(S(["🎁 PARRAINAGE", "---", `📝 ${p}bank parrainage creer`, `📝 ${p}bank parrainage utiliser <code>`, "🎁 Parrain: +5000$ | Parrainé: +10000$"]));
-            if (sub === "creer" || sub === "create") {
-                const r = await apiCall(`/${user}/parrain/create`, "POST");
-                if (!r.success) return message.reply(S([`❌ ${r.error}`]));
-                return message.reply(S(["🎁 CODE CRÉÉ !", "---", `🔑 ${r.code}`, "---", "📝 Partagez ce code à vos amis !"]));
+            case "withdraw": {
+                const amount = await parseAmount(args[1]);
+                if (amount <= 0n) return message.reply(S(["❌ Montant invalide.", `📝 ${p}bank withdraw <montant>`]));
+                if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte.`]));
+                if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde bancaire insuffisant.", `💰 Banque : ${await formatNumber(bankData.bank)}$`]));
+                setPending(user, { amount: amount.toString(), type: "withdraw" }, () => message.reply(S(["⏰ Transaction expirée."])));
+                return message.reply(S([`💳 Retrait de ${await formatNumber(amount)}$`, "---", "🔐 Entrez votre CVV pour confirmer", "⏰ 20 secondes"]));
             }
-            if (sub === "utiliser" || sub === "use") {
-                const code = args[2];
-                if (!code) return message.reply(S(["❌ Code manquant."]));
-                const r = await apiCall(`/${user}/parrain/use`, "POST", { code });
+
+            case "balance":
+            case "show": {
+                const cash = await getCash(user);
+                const bal = toBigInt(bankData.bank);
+                const avatarUrl = await getAvatar(user);
+                await sendWithCard(message,
+                    ["💰 VOS SOLDES", "---", `🏦 Banque : ${await formatNumber(bal)}$`, `💵 Poche : ${await formatNumber(cash)}$`, isVip ? "⭐ Statut : VIP" : "👤 Statut : Standard"],
+                    { title: "BALANCE", balance: await formatNumber(bal), username, cardData: bankData.card, avatarUrl, subtitle: `Poche: ${await formatNumber(cash)}$`, theme: "dark" },
+                    imageMode
+                );
+                break;
+            }
+
+            case "card": {
+                const r = await apiCall(`/${user}/card`, "POST");
+                if (!r.success) return message.reply(S([`❌ ${r.error || "Erreur création carte"}`]));
+                const c = r.data;
+                bankData.card = c;
+                const avatarUrl = await getAvatar(user);
+                await sendWithCard(message,
+                    ["💳 VOTRE CARTE BANCAIRE", "---", `🏦 N° : ${c.cardNumber}`, `📅 Exp : ${c.cardExpiry}`, `🔐 CVV : ${c.cardCvv}`, "---", "⚠️ Gardez votre CVV secret !"],
+                    { title: "MY CARD", balance: await formatNumber(toBigInt(bankData.bank)), username, cardData: c, cvv: c.cardCvv, avatarUrl, theme: "gold" },
+                    imageMode
+                );
+                break;
+            }
+
+            case "transfer":
+            case "send": {
+                const targetId = Object.keys(event.mentions)[0] || args[1];
+                const amount = await parseAmount(args[2]);
+                if (!targetId || targetId === user) return message.reply(S(["❌ Cible invalide.", `📝 ${p}bank transfer @mention <montant>`]));
+                if (amount <= 0n) return message.reply(S(["❌ Montant invalide."]));
+                if (!bankData.card?.cardCreated) return message.reply(S([`❌ Créez d'abord une carte.`]));
+                if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde insuffisant."]));
+                const targetName = await getName(targetId);
+                setPending(user, { amount: amount.toString(), type: "transfer", targetId, targetName }, () => message.reply(S(["⏰ Transfert expiré."])));
+                return message.reply(S([`💸 Transfert de ${await formatNumber(amount)}$`, `🎯 Vers : ${targetName}`, "---", "🔐 Entrez votre CVV pour confirmer", "⏰ 20 secondes"]));
+            }
+
+            case "interest": {
+                if (toBigInt(bankData.bank) <= 0n) return message.reply(S(["❌ Pas d'argent en banque."]));
+                const r = await apiCall(`/${user}/interest`, "POST");
                 if (!r.success) return message.reply(S([`❌ ${r.error}`]));
                 bankData = (await apiCall(`/${user}`)).data || bankData;
-                return message.reply(S(["🎉 Parrainage réussi !", "---", `🎁 Bonus : +10000$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`]));
+                const earned = toBigInt(r.interestEarned);
+                const avatarUrl = await getAvatar(user);
+                await sendWithCard(message,
+                    ["📈 Intérêts crédités !", "---", `✨ Gain : +${await formatNumber(earned)}$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`],
+                    { title: "INTEREST", balance: await formatNumber(bankData.bank), username, cardData: bankData.card, avatarUrl, subtitle: `+ ${await formatNumber(earned)}$`, theme: "green" },
+                    imageMode
+                );
+                break;
             }
-            break;
-        }
 
-        case "history": {
-            const limit = Math.min(parseInt(args[1]) || 10, 20);
-            const r = await apiCall(`/${user}/transactions?limit=${limit}`);
-            if (!r.success || !r.data?.length)
-                return message.reply(S(["📜 Aucune transaction.", "Faites des opérations pour voir l'historique !"]));
-            const emojiMap = { deposit:"⬆️", withdraw:"⬇️", interest:"📈", transfer_sent:"💸", transfer_received:"💰", gamble_win:"🎉", gamble_lose:"💀", lottery_win:"🎉", lottery_lose:"💀", rob_sent:"🦹", rob_received:"😱" };
-            const lines = [`📜 HISTORIQUE (${r.data.length})`, "---"];
-            for (const tx of r.data) {
-                const e    = emojiMap[tx.type] || "💱";
-                const amt  = toBigInt(tx.amount);
-                const sign = amt >= 0n ? "+" : "";
-                const date = new Date(tx.date).toLocaleString("fr-FR");
-                lines.push(`${e} ${tx.type}`);
-                lines.push(`   ${sign}${await formatNumber(amt)}$ | ${date}`);
-            }
-            return message.reply(S(lines));
-        }
-
-        case "rob": {
-            if (!isVip) return message.reply(S(["❌ Seuls les VIP peuvent utiliser rob !", `📝 Contactez un admin`]));
-            const targetId = Object.keys(event.mentions)[0] || args[1];
-            if (!targetId || targetId === user) return message.reply(S(["❌ Cible invalide.", `📝 ${p}bank rob @mention <montant>`, "⚠️ 50% de chance de réussir"]));
-            const targetBankRes = await apiCall(`/${targetId}`);
-            const targetBal = toBigInt(targetBankRes.data?.bank || "0");
-            if (targetBal <= 0n) return message.reply(S(["❌ Cette personne n'a rien en banque."]));
-            let amount = await parseAmount(args[2]);
-            if (amount <= 0n) {
-                const pct = Math.random() * 0.15 + 0.05;
-                amount = toBigInt(Math.floor(Number(targetBal) * pct)) || 1n;
-            }
-            if (amount > targetBal) amount = targetBal;
-            const targetName = await getName(targetId);
-            const success    = Math.random() < 0.5;
-            if (!success) {
-                return message.reply(S(["🛡️ VOL ÉCHOUÉ !", "---", `🎯 Cible : ${targetName}`, `💵 Tentative : ${await formatNumber(amount)}$`, "❌ Vous avez été repéré !"]));
-            }
-            const r = await apiCall(`/${user}/rob`, "POST", { targetId, amount: amount.toString() });
-            if (!r.success) return message.reply(S([`❌ ${r.error || "Erreur technique"}`]));
-            bankData = (await apiCall(`/${user}`)).data || bankData;
-            const avatarUrl = await getAvatar(user);
-            await sendWithCard(message,
-                ["🦹 VOL RÉUSSI !", "---", `🎯 Cible : ${targetName}`, `💰 Volé : +${await formatNumber(amount)}$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`],
-                { title: "ROB", balance: await formatNumber(bankData.bank), username, cardData: bankData.card, avatarUrl, subtitle: `+ ${await formatNumber(amount)}$ volé`, theme: "purple" },
-                imageMode
-            );
-            break;
-        }
-
-        case "vip": {
-            const sub = args[1]?.toLowerCase();
-            if (sub === "list") {
-                if (!vipList.length) return message.reply(S(["👑 Aucun VIP pour l'instant."]));
-                const lines = [`👑 VIP (${vipList.length})`, "---"];
-                for (let i = 0; i < vipList.length; i++) lines.push(`⭐ ${i+1}. ${await getName(vipList[i])}`);
+            case "top":
+            case "richest": {
+                const r = await apiCall("/top");
+                if (!r.success || !r.data?.length)
+                    return message.reply(S(["👑 Classement vide.", "Faites bank card pour commencer !"]));
+                const medals = ["🥇", "🥈", "🥉"];
+                const lines = ["👑 TOP BANQUE", "---"];
+                for (let i = 0; i < Math.min(r.data.length, 15); i++) {
+                    const u = r.data[i];
+                    const name = await getName(u.userId);
+                    const bal = await formatNumber(u.bank || "0");
+                    lines.push(`${medals[i] || `${i + 1}.`} ${name}`);
+                    lines.push(`   💰 ${bal}$`);
+                }
                 return message.reply(S(lines));
             }
-            if (sub === "-a") {
-                if (user !== BOT_ADMIN) return message.reply(S(["❌ Accès refusé."]));
-                const uid = args[2];
-                if (!uid) return message.reply(S(["❌ UID manquant."]));
-                if (vipList.includes(uid)) return message.reply(S(["⚠️ Déjà VIP."]));
-                vipList.push(uid);
-                saveVIPs();
-                return message.reply(S([`✅ ${await getName(uid)} ajouté aux VIP.`]));
-            }
-            if (sub === "-r") {
-                if (user !== BOT_ADMIN) return message.reply(S(["❌ Accès refusé."]));
-                const uid  = args[2];
-                const idx  = vipList.indexOf(uid);
-                if (idx === -1) return message.reply(S(["❌ Pas dans la liste VIP."]));
-                vipList.splice(idx, 1);
-                saveVIPs();
-                return message.reply(S([`✅ ${uid} retiré des VIP.`]));
-            }
-            return message.reply(S([isVip ? "⭐ Vous êtes VIP !" : "👤 Vous n'êtes pas VIP", "---", "Avantages VIP :", "🦹 Accès à bank rob", `📝 ${p}bank vip list → Liste VIP`]));
-        }
 
-        case "image": {
-            const sub = args[1]?.toLowerCase();
-            if (sub === "on")  return message.reply(S(["🖼️ Mode carte activé."]));
-            if (sub === "off") return message.reply(S(["📝 Mode texte activé."]));
-            return message.reply(S([`🖼️ ${p}bank image on/off`]));
-        }
+            case "gamble":
+            case "bet": {
+                const sub = args[1]?.toLowerCase();
+                if (!sub || sub === "help")
+                    return message.reply(S(["🎰 GAMBLE — PILE OU FACE", "---", `📝 ${p}bank gamble play <montant> <pile/face>`]));
+                if (sub !== "play") break;
+                const amount = await parseAmount(args[2]);
+                const choice = args[3]?.toLowerCase();
+                if (amount <= 0n) return message.reply(S(["❌ Montant invalide."]));
+                if (!["pile", "face"].includes(choice)) return message.reply(S(["❌ Choisissez pile ou face."]));
+                if (amount > toBigInt(bankData.bank)) return message.reply(S(["❌ Solde insuffisant."]));
+                const r = await apiCall(`/${user}/gamble`, "POST", { amount: amount.toString(), choice });
+                if (!r.success) return message.reply(S([`❌ ${r.error}`]));
+                bankData = (await apiCall(`/${user}`)).data || bankData;
+                const { win, result, winAmount } = r;
+                const winBig = toBigInt(winAmount);
+                await sendWithCasino(message,
+                    [win ? "🎉 VICTOIRE AU GAMBLE !" : "💀 PERDU AU GAMBLE", "---",
+                        `🪙 Votre choix : ${choice.toUpperCase()}`,
+                        `🎲 Résultat : ${result.toUpperCase()}`,
+                        win ? `✨ Gain : +${await formatNumber(winBig)}$` : `📉 Perte : -${await formatNumber(amount)}$`,
+                        `💰 Solde : ${await formatNumber(bankData.bank)}$`],
+                    { username, win, choice, result, amount: await formatNumber(amount), winAmount: await formatNumber(winBig), balance: await formatNumber(bankData.bank), mode: "gamble" },
+                    imageMode
+                );
+                break;
+            }
 
-        default: {
-            return message.reply(S([
-                "🦔 HEDGEHOG BANK",
-                "━━━━━━━━━━━━━━━",
-                "💰 TRANSACTIONS",
-                `⤷ ${p}bank deposit <montant>`,
-                `⤷ ${p}bank withdraw <montant>`,
-                `⤷ ${p}bank balance`,
-                `⤷ ${p}bank transfer @mention <mnt>`,
-                "---",
-                "📈 GAINS",
-                `⤷ ${p}bank interest`,
-                `⤷ ${p}bank gamble play <mnt> <pile/face>`,
-                `⤷ ${p}bank lottery play <mnt>`,
-                "---",
-                "🎮 SOCIAL",
-                `⤷ ${p}bank rob @mention (VIP)`,
-                `⤷ ${p}bank parrainage creer`,
-                "---",
-                "📊 INFOS",
-                `⤷ ${p}bank history [nb]`,
-                `⤷ ${p}bank top`,
-                `⤷ ${p}bank vip`,
-                "---",
-                "⚙️ AUTRES",
-                `⤷ ${p}bank card`,
-                `⤷ ${p}bank image on/off`,
-            ]));
-        }
+            case "lottery": {
+                const sub = args[1]?.toLowerCase();
+                if (!sub || sub === "help")
+                    return message.reply(S(["🎲 LOTERIE", "---", `📝 ${p}bank lottery play <montant>`, "🎁 Gains : x2 (2/3), x10 (3/3), x100 (jackpot)"]));
+                if (sub !== "play") break;
+                const ticket = await parseAmount(args[2]);
+                if (ticket <= 0n) return message.reply(S(["❌ Montant invalide."]));
+                const cash = await getCash(user);
+                if (ticket > cash) return message.reply(S(["❌ Solde cash insuffisant.", `💰 Poche : ${await formatNumber(cash)}$`]));
+                const r = await apiCall(`/${user}/lottery`, "POST", { ticketPrice: ticket.toString() });
+                if (!r.success) return message.reply(S([`❌ ${r.error}`]));
+                const netChange = r.win ? toBigInt(r.winAmount) - ticket : -ticket;
+                await addCash(user, netChange);
+                bankData = (await apiCall(`/${user}`)).data || bankData;
+                const winBig = toBigInt(r.winAmount || "0");
+                await sendWithCasino(message,
+                    [r.win ? "🎉 VICTOIRE À LA LOTERIE !" : "💀 PERDU À LA LOTERIE", "---",
+                        `🔢 Vos numéros : ${r.userNumbers?.join(" - ")}`,
+                        `🎲 Tirés : ${r.drawnNumbers?.join(" - ")}`,
+                        `✅ Correspondances : ${r.matchCount}/3`,
+                        r.win ? `✨ Gain : +${await formatNumber(winBig)}$ (x${r.multiplier})` : `📉 Perte : -${await formatNumber(ticket)}$`],
+                    { username, win: r.win, amount: await formatNumber(ticket), winAmount: await formatNumber(winBig), balance: await formatNumber(bankData.bank), mode: "lottery" },
+                    imageMode
+                );
+                break;
+            }
+
+            case "parrainage":
+            case "parrain": {
+                const sub = args[1]?.toLowerCase();
+                if (!sub || sub === "help")
+                    return message.reply(S(["🎁 PARRAINAGE", "---", `📝 ${p}bank parrainage creer`, `📝 ${p}bank parrainage utiliser <code>`, "🎁 Parrain: +5000$ | Parrainé: +10000$"]));
+                if (sub === "creer" || sub === "create") {
+                    const r = await apiCall(`/${user}/parrain/create`, "POST");
+                    if (!r.success) return message.reply(S([`❌ ${r.error}`]));
+                    return message.reply(S(["🎁 CODE CRÉÉ !", "---", `🔑 ${r.code}`, "---", "📝 Partagez ce code à vos amis !"]));
+                }
+                if (sub === "utiliser" || sub === "use") {
+                    const code = args[2];
+                    if (!code) return message.reply(S(["❌ Code manquant."]));
+                    const r = await apiCall(`/${user}/parrain/use`, "POST", { code });
+                    if (!r.success) return message.reply(S([`❌ ${r.error}`]));
+                    bankData = (await apiCall(`/${user}`)).data || bankData;
+                    return message.reply(S(["🎉 Parrainage réussi !", "---", `🎁 Bonus : +10000$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`]));
+                }
+                break;
+            }
+
+            case "history": {
+                const limit = Math.min(parseInt(args[1]) || 10, 20);
+                const r = await apiCall(`/${user}/transactions?limit=${limit}`);
+                if (!r.success || !r.data?.length)
+                    return message.reply(S(["📜 Aucune transaction.", "Faites des opérations pour voir l'historique !"]));
+                const emojiMap = { deposit: "⬆️", withdraw: "⬇️", interest: "📈", transfer_sent: "💸", transfer_received: "💰", gamble_win: "🎉", gamble_lose: "💀", lottery_win: "🎉", lottery_lose: "💀", rob_sent: "🦹", rob_received: "😱" };
+                const lines = [`📜 HISTORIQUE (${r.data.length})`, "---"];
+                for (const tx of r.data) {
+                    const e = emojiMap[tx.type] || "💱";
+                    const amt = toBigInt(tx.amount);
+                    const sign = amt >= 0n ? "+" : "";
+                    const date = new Date(tx.date).toLocaleString("fr-FR");
+                    lines.push(`${e} ${tx.type}`);
+                    lines.push(`   ${sign}${await formatNumber(amt)}$ | ${date}`);
+                }
+                return message.reply(S(lines));
+            }
+
+            case "rob": {
+                if (!isVip) return message.reply(S(["❌ Seuls les VIP peuvent utiliser rob !", `📝 Contactez un admin`]));
+                const targetId = Object.keys(event.mentions)[0] || args[1];
+                if (!targetId || targetId === user) return message.reply(S(["❌ Cible invalide.", `📝 ${p}bank rob @mention <montant>`, "⚠️ 50% de chance de réussir"]));
+                const targetBankRes = await apiCall(`/${targetId}`);
+                const targetBal = toBigInt(targetBankRes.data?.bank || "0");
+                if (targetBal <= 0n) return message.reply(S(["❌ Cette personne n'a rien en banque."]));
+                let amount = await parseAmount(args[2]);
+                if (amount <= 0n) {
+                    const pct = Math.random() * 0.15 + 0.05;
+                    amount = toBigInt(Math.floor(Number(targetBal) * pct)) || 1n;
+                }
+                if (amount > targetBal) amount = targetBal;
+                const targetName = await getName(targetId);
+                const success = Math.random() < 0.5;
+                if (!success) {
+                    return message.reply(S(["🛡️ VOL ÉCHOUÉ !", "---", `🎯 Cible : ${targetName}`, `💵 Tentative : ${await formatNumber(amount)}$`, "❌ Vous avez été repéré !"]));
+                }
+                const r = await apiCall(`/${user}/rob`, "POST", { targetId, amount: amount.toString() });
+                if (!r.success) return message.reply(S([`❌ ${r.error || "Erreur technique"}`]));
+                bankData = (await apiCall(`/${user}`)).data || bankData;
+                const avatarUrl = await getAvatar(user);
+                await sendWithCard(message,
+                    ["🦹 VOL RÉUSSI !", "---", `🎯 Cible : ${targetName}`, `💰 Volé : +${await formatNumber(amount)}$`, `💰 Solde : ${await formatNumber(bankData.bank)}$`],
+                    { title: "ROB", balance: await formatNumber(bankData.bank), username, cardData: bankData.card, avatarUrl, subtitle: `+ ${await formatNumber(amount)}$ volé`, theme: "purple" },
+                    imageMode
+                );
+                break;
+            }
+
+            case "vip": {
+                const sub = args[1]?.toLowerCase();
+                if (sub === "list") {
+                    if (!vipList.length) return message.reply(S(["👑 Aucun VIP pour l'instant."]));
+                    const lines = [`👑 VIP (${vipList.length})`, "---"];
+                    for (let i = 0; i < vipList.length; i++) lines.push(`⭐ ${i + 1}. ${await getName(vipList[i])}`);
+                    return message.reply(S(lines));
+                }
+                if (sub === "-a") {
+                    if (user !== BOT_ADMIN) return message.reply(S(["❌ Accès refusé."]));
+                    const uid = args[2];
+                    if (!uid) return message.reply(S(["❌ UID manquant."]));
+                    if (vipList.includes(uid)) return message.reply(S(["⚠️ Déjà VIP."]));
+                    vipList.push(uid);
+                    saveVIPs();
+                    return message.reply(S([`✅ ${await getName(uid)} ajouté aux VIP.`]));
+                }
+                if (sub === "-r") {
+                    if (user !== BOT_ADMIN) return message.reply(S(["❌ Accès refusé."]));
+                    const uid = args[2];
+                    const idx = vipList.indexOf(uid);
+                    if (idx === -1) return message.reply(S(["❌ Pas dans la liste VIP."]));
+                    vipList.splice(idx, 1);
+                    saveVIPs();
+                    return message.reply(S([`✅ ${uid} retiré des VIP.`]));
+                }
+                return message.reply(S([isVip ? "⭐ Vous êtes VIP !" : "👤 Vous n'êtes pas VIP", "---", "Avantages VIP :", "🦹 Accès à bank rob", `📝 ${p}bank vip list → Liste VIP`]));
+            }
+
+            case "image": {
+                const sub = args[1]?.toLowerCase();
+                if (sub === "on") return message.reply(S(["🖼️ Mode carte activé."]));
+                if (sub === "off") return message.reply(S(["📝 Mode texte activé."]));
+                return message.reply(S([`🖼️ ${p}bank image on/off`]));
+            }
+
+            default: {
+                return message.reply(S([
+                    "🦔 HEDGEHOG BANK",
+                    "━━━━━━━━━━━━━━━",
+                    "💰 TRANSACTIONS",
+                    `⤷ ${p}bank deposit <montant>`,
+                    `⤷ ${p}bank withdraw <montant>`,
+                    `⤷ ${p}bank balance`,
+                    `⤷ ${p}bank transfer @mention <mnt>`,
+                    "---",
+                    "📈 GAINS",
+                    `⤷ ${p}bank interest`,
+                    `⤷ ${p}bank gamble play <mnt> <pile/face>`,
+                    `⤷ ${p}bank lottery play <mnt>`,
+                    "---",
+                    "🎮 SOCIAL",
+                    `⤷ ${p}bank rob @mention (VIP)`,
+                    `⤷ ${p}bank parrainage creer`,
+                    "---",
+                    "📊 INFOS",
+                    `⤷ ${p}bank history [nb]`,
+                    `⤷ ${p}bank top`,
+                    `⤷ ${p}bank vip`,
+                    "---",
+                    "⚙️ AUTRES",
+                    `⤷ ${p}bank card`,
+                    `⤷ ${p}bank image on/off`,
+                ]));
+            }
         }
     }
 };
