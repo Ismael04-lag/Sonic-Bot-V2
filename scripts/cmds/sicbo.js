@@ -23,7 +23,7 @@ function isInfinity(value) {
 function formatBigInt(num) {
     if (isInfinity(num)) return "∞";
     if (num === 0n) return "0";
-    const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+  const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Dq", "Dz", "Qs", "Qo", "Qu"];
     let i = 0;
     let scaled = num;
     const thousand = 1000n;
