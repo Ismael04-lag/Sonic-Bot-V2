@@ -3,7 +3,7 @@ const path = require("path");
 const axios = require("axios");
 const { createCanvas, loadImage } = require("canvas");
 
-const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/parse";
+const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/format";
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
 
 const SOUND_URLS = {
