@@ -3,7 +3,7 @@ const { createCanvas, loadImage } = require("canvas");
 const axios = require("axios");
 const path = require("path");
 
-const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/parse";
+const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/format";
 const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
 
 function toBigInt(value) {
