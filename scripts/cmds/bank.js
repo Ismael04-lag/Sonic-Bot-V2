@@ -5,7 +5,7 @@ const { createCanvas, loadImage } = require("canvas");
 
 const API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CASH_URL = "https://cash-api-five.vercel.app/api/cash";
-const FORMAT_URL = "https://numbers-conversion-api.vercel.app/api/format";
+const FORMAT_URL = "https://numbers-conversion.vercel.app/api/format";
 const BOT_ADMIN = "61589149033077";
 
 const VIP_FILE = path.join(__dirname, "bank_vips.json");
