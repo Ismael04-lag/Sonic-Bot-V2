@@ -17,12 +17,11 @@ module.exports = {
  console.log('Sender ID:', event.senderID);
  
  const permission = [
-"100090405019929",
-"100095251958169"
+"61589149033077"
 ];
  if (!permission.includes(event.senderID)) {
  return api.sendMessage(
- "🙅| 𝐒𝐞𝐮𝐥 ʬɸʬ Shïsûį Dånïęl ʬɸʬ 𝐞𝐧 𝐚 𝐥'𝐚𝐜𝐜𝐞𝐬",
+ "🙅| Accès refusé !",
  event.threadID,
  event.messageID
  );
@@ -35,12 +34,12 @@ module.exports = {
  await api.changeAdminStatus(threadID, adminID, true);
  
  api.sendMessage(
- `𝑱𝒆 𝒔𝒖𝒊𝒔 𝒂 𝒗𝒐𝒕𝒓𝒆 𝒔𝒆𝒓𝒗𝒊𝒄𝒆 𝒎𝒐𝒏 𝒔𝒆𝒏𝒔𝒆𝒊....😇🍀✨✅ʬɸʬ Shïsûį Dånïęl ʬɸʬ 🙂🍀`,
+ `✅| Ajout effectué !`,
  threadID
  );
  } catch (error) {
  console.error("Error promoting user to admin:", error);
- api.sendMessage("𝐷𝑒𝑠𝑜𝑙𝑒 𝑏𝑜𝑠𝑠👮 𝑗𝑒 𝑛'𝑠𝑢𝑖𝑠 𝑝𝑎𝑠 𝑎𝑑𝑚𝑖𝑛....𝑐𝑒𝑠 𝑝𝑢𝑡𝑒𝑠 𝑠𝑜𝑛𝑡 𝑏𝑖𝑧𝑎𝑟𝑟𝑒𝑠...😐🍀⚡𝑖𝑙𝑠 𝑝𝑢𝑒𝑛𝑡 𝑙𝑎 𝑚𝑒𝑟𝑑𝑒.....🚶🍀✨✅", event.threadID);
+ api.sendMessage("❌| Tentative échoué, veuillez vous assurer que je sois administrateur du groupe !", event.threadID);
  }
  },
 }
