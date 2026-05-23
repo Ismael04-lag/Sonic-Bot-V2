@@ -5,6 +5,7 @@ const { createCanvas, loadImage } = require("canvas");
 
 const API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CASH_URL = "https://cash-api-five.vercel.app/api/cash";
+const FORMAT_URL = "https://numbers-conversion-api.vercel.app/api/format";
 const BOT_ADMIN = "61589149033077";
 
 const VIP_FILE = path.join(__dirname, "bank_vips.json");
@@ -28,65 +29,90 @@ function toBigInt(v) {
     } catch { return 0n; }
 }
 
+// ── Cache local pour éviter trop d'appels API ──
+const formatCache = new Map();
+
 async function formatNumber(num) {
     const big = toBigInt(num);
-    if (big < 0n) return "-" + await formatNumber(-big);
+    const key = big.toString();
+
+    if (formatCache.has(key)) return formatCache.get(key);
+
+    try {
+        const res = await axios.get(`${FORMAT_URL}?n=${key}`, { timeout: 3000 });
+        if (res.data?.success) {
+            const result = res.data.formatted;
+            formatCache.set(key, result);
+            // Limite du cache à 500 entrées
+            if (formatCache.size > 500) formatCache.delete(formatCache.keys().next().value);
+            return result;
+        }
+    } catch(e) {
+        // Fallback local si l'API est down
+        console.error("Format API down, using local fallback:", e.message);
+    }
+    return localFormatFallback(big);
+}
+
+// ── Formatage batch (multiple nombres en 1 appel) ──
+async function formatNumbers(nums) {
+    const bigs = nums.map(n => toBigInt(n));
+    const keys = bigs.map(b => b.toString());
+
+    // Quels sont déjà en cache ?
+    const uncached = keys.filter(k => !formatCache.has(k));
+
+    if (uncached.length > 0) {
+        try {
+            const res = await axios.post(FORMAT_URL, { numbers: uncached }, { timeout: 3000 });
+            if (res.data?.success) {
+                for (const r of res.data.results) {
+                    formatCache.set(r.raw, r.formatted);
+                }
+            }
+        } catch(e) {
+            console.error("Format batch API down:", e.message);
+        }
+    }
+
+    return keys.map(k => formatCache.get(k) || localFormatFallback(BigInt(k)));
+}
+
+// ── Fallback local (si l'API est hors ligne) ──
+function localFormatFallback(big) {
+    if (big < 0n) return "-" + localFormatFallback(-big);
     if (big === 0n) return "0";
     if (big > 10n ** 260n) return "∞";
 
-    const tiers = [
-        // Tiers ultra-hauts (10^258 → 10^63)
-        { v: 10n**258n, s: "Qiu" }, { v: 10n**255n, s: "Qu" }, { v: 10n**252n, s: "Tu" }, { v: 10n**249n, s: "Du" }, { v: 10n**246n, s: "Uc" },
-        { v: 10n**243n, s: "DcQ" }, { v: 10n**240n, s: "NoQ" }, { v: 10n**237n, s: "OcQ" }, { v: 10n**234n, s: "SpQ" }, { v: 10n**231n, s: "SxQ" },
-        { v: 10n**228n, s: "QiQ" }, { v: 10n**225n, s: "QQ" }, { v: 10n**222n, s: "TQ" }, { v: 10n**219n, s: "DQ" }, { v: 10n**216n, s: "UQ" },
-        { v: 10n**213n, s: "DcTr" }, { v: 10n**210n, s: "NoTr" }, { v: 10n**207n, s: "OcTr" }, { v: 10n**204n, s: "SpTr" }, { v: 10n**201n, s: "SxTr" },
-        { v: 10n**198n, s: "QiTr" }, { v: 10n**195n, s: "QTr" }, { v: 10n**192n, s: "TTr" }, { v: 10n**189n, s: "DTr" }, { v: 10n**186n, s: "UTr" },
-        { v: 10n**183n, s: "DcT" }, { v: 10n**180n, s: "NoT" }, { v: 10n**177n, s: "OcT" }, { v: 10n**174n, s: "SpT" }, { v: 10n**171n, s: "SxT" },
-        { v: 10n**168n, s: "QiT" }, { v: 10n**165n, s: "QT" }, { v: 10n**162n, s: "TT" }, { v: 10n**159n, s: "DT" }, { v: 10n**156n, s: "UT" },
-        { v: 10n**153n, s: "DcV" }, { v: 10n**150n, s: "NoV" }, { v: 10n**147n, s: "OcV" }, { v: 10n**144n, s: "SpV" }, { v: 10n**141n, s: "SxV" },
-        { v: 10n**138n, s: "QiV" }, { v: 10n**135n, s: "QV" }, { v: 10n**132n, s: "TV" }, { v: 10n**129n, s: "DV" }, { v: 10n**126n, s: "UV" },
-        { v: 10n**123n, s: "DcI" }, { v: 10n**120n, s: "NoI" }, { v: 10n**117n, s: "OcI" }, { v: 10n**114n, s: "SpI" }, { v: 10n**111n, s: "SxI" },
-        { v: 10n**108n, s: "QiI" }, { v: 10n**105n, s: "QI" }, { v: 10n**102n, s: "TI" }, { v: 10n**99n, s: "DI" }, { v: 10n**96n, s: "UI" },
-        { v: 10n**93n, s: "Dc" }, { v: 10n**90n, s: "No" }, { v: 10n**87n, s: "Oc" }, { v: 10n**84n, s: "Sp" }, { v: 10n**81n, s: "Sx" },
-        { v: 10n**78n, s: "Qi" }, { v: 10n**75n, s: "Qa" }, { v: 10n**72n, s: "T" }, { v: 10n**69n, s: "B" }, { v: 10n**66n, s: "M" },
-        { v: 10n**63n, s: "k" },
-        // ─── Tiers manquants (10^60 → 10^6) ───
-        { v: 10n**60n, s: "NoDc" },
-        { v: 10n**57n, s: "OcDc" },
-        { v: 10n**54n, s: "SpDc" },
-        { v: 10n**51n, s: "Qt"  },   // quintillion (10^51)
-        { v: 10n**48n, s: "Qo"  },
-        { v: 10n**45n, s: "Qs"  },
-        { v: 10n**42n, s: "Dz"  },
-        { v: 10n**39n, s: "Dq"  },
-        { v: 10n**36n, s: "Ud"  },
-        { v: 10n**33n, s: "De"  },
-        { v: 10n**30n, s: "Non" },
-        { v: 10n**27n, s: "Oct" },
-        { v: 10n**24n, s: "Sep" },
-        { v: 10n**21n, s: "Sx"  },   // sextillion
-        { v: 10n**18n, s: "Qi"  },   // quintillion court
-        { v: 10n**15n, s: "Qd"  },   // quadrillion
-        { v: 10n**12n, s: "Tr"  },   // trillion
-        { v: 10n**9n,  s: "Md"  },   // milliard / billion
-        { v: 10n**6n,  s: "M"   },   // million
+    const TIERS = [
+        { v: 10n**258n, s: "Qiu" }, { v: 10n**255n, s: "Qu" }, { v: 10n**252n, s: "Tu" },
+        { v: 10n**249n, s: "Du" }, { v: 10n**246n, s: "Uc" }, { v: 10n**243n, s: "DcQ" },
+        { v: 10n**93n, s: "DcN" }, { v: 10n**90n, s: "NoN" }, { v: 10n**87n, s: "OcN" },
+        { v: 10n**84n, s: "SpN" }, { v: 10n**81n, s: "SxN" }, { v: 10n**78n, s: "QiN" },
+        { v: 10n**75n, s: "QaN" }, { v: 10n**72n, s: "TN" }, { v: 10n**69n, s: "BN" },
+        { v: 10n**66n, s: "MN" }, { v: 10n**63n, s: "kN" }, { v: 10n**60n, s: "NoDc" },
+        { v: 10n**57n, s: "OcDc" }, { v: 10n**54n, s: "SpDc" }, { v: 10n**51n, s: "Qt" },
+        { v: 10n**48n, s: "Qo" }, { v: 10n**45n, s: "Qs" }, { v: 10n**42n, s: "Dz" },
+        { v: 10n**39n, s: "Dq" }, { v: 10n**36n, s: "Ud" }, { v: 10n**33n, s: "De" },
+        { v: 10n**30n, s: "Non" }, { v: 10n**27n, s: "Oct" }, { v: 10n**24n, s: "Sep" },
+        { v: 10n**21n, s: "Sxt" }, { v: 10n**18n, s: "Qin" }, { v: 10n**15n, s: "Qd" },
+        { v: 10n**12n, s: "Tr" }, { v: 10n**9n, s: "Md" }, { v: 10n**6n, s: "M" },
+        { v: 10n**3n, s: "k" },
     ];
 
-    for (const tier of tiers) {
+    for (const tier of TIERS) {
         if (big >= tier.v) {
             const intPart = big / tier.v;
             const remainder = big % tier.v;
             const decPart = (remainder * 100n) / tier.v;
             if (decPart > 0n) {
-                const dec = Number(decPart).toString().padStart(2, '0').slice(0, 2);
-                const decTrimmed = dec.replace(/0+$/, '');
-                if (decTrimmed === "") return `${intPart}${tier.s}`;
-                return `${intPart}.${decTrimmed}${tier.s}`;
+                const dec = Number(decPart).toString().padStart(2, "0").replace(/0+$/, "");
+                if (dec === "") return `${intPart}${tier.s}`;
+                return `${intPart}.${dec}${tier.s}`;
             }
             return `${intPart}${tier.s}`;
         }
     }
-    // Moins d'un million → nombre brut (ex: 999 999)
     return big.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
@@ -524,17 +550,14 @@ module.exports = {
             const base = toBigInt(Math.floor(val));
             if (!sfx) return base;
             const SFX = {
-                k: 1000n, m: 1000000n, b: 1000000000n, t: 1000000000000n,
-                qa: 1000000000000000n, qi: 1000000000000000000n,
-                sx: 1000000000000000000000n, sp: 1000000000000000000000000n,
-                oc: 1000000000000000000000000000n, no: 1000000000000000000000000000000n,
-                dc: 1000000000000000000000000000000000n,
-                dq: 1000000000000000000000000000000000000n,
-                dz: 1000000000000000000000000000000000000000n,
-                qs: 1000000000000000000000000000000000000000000n,
-                qo: 1000000000000000000000000000000000000000000000n,
-                qu: 1000000000000000000000000000000000000000000000000n,
-                qt: 1000000000000000000000000000000000000000000000000000n
+                k: 1000n, m: 1000000n, md: 1000000000n, b: 1000000000n,
+                tr: 10n**12n, qd: 10n**15n, qin: 10n**18n, sxt: 10n**21n,
+                sep: 10n**24n, oct: 10n**27n, non: 10n**30n, de: 10n**33n,
+                ud: 10n**36n, dq: 10n**39n, dz: 10n**42n, qs: 10n**45n,
+                qo: 10n**48n, qt: 10n**51n, nodc: 10n**60n, ocdc: 10n**57n,
+                spdc: 10n**54n,
+                qa: 10n**75n, qi: 10n**78n, sx: 10n**81n, sp: 10n**84n,
+                oc: 10n**87n, no: 10n**90n, dc: 10n**93n,
             };
             if (SFX[sfx]) return base * SFX[sfx];
             return base;
