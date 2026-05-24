@@ -35,35 +35,48 @@ function toBigInt(value) {
     }
 }
 
-function isInfinity(value) {
-    if (typeof value === 'bigint') return value > BigInt("9".repeat(260));
-    return !isFinite(Number(value)) || Number(value) >= 1e260;
-}
-
-function formatBigInt(num) {
-    if (isInfinity(num)) return "∞";
-    if (num === 0n) return "0";
-  const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Dq", "Dz", "Qs", "Qo", "Qu"];
-    let i = 0;
-    let scaled = num;
-    const thousand = 1000n;
-    while (scaled >= thousand && i < suffixes.length - 1) {
-        scaled = scaled / thousand;
-        i++;
-    }
-    const remainder = i > 0 ? (num % (thousand ** BigInt(i))) / (thousand ** BigInt(i - 1)) : 0n;
-    if (i > 0 && remainder > 0n) return `${scaled}.${remainder}${suffixes[i]}`;
-    return `${scaled}${suffixes[i]}`;
-}
-
 async function formatNumber(num) {
-    if (isInfinity(num)) return "∞";
     const bigNum = toBigInt(num);
+    if (bigNum === 0n) return "0";
+    
     try {
-        const response = await axios.get(`${CONVERT_API_URL}?number=${bigNum.toString()}`);
-        if (response.data && response.data.success) return response.data.formatted;
-    } catch (error) {}
-    return formatBigInt(bigNum);
+        const response = await axios.get(`${CONVERT_API_URL}?n=${bigNum.toString()}`);
+        if (response.data && response.data.success) {
+            return response.data.formatted;
+        }
+    } catch (error) {
+        console.error("Conversion API error:", error.message);
+    }
+    
+    const suffixes = [
+        "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", 
+        "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", 
+        "OcDc", "NoDc", "V", "UV", "DV", "TV", "QaV", "QiV", "SxV", 
+        "SpV", "OcV", "NoV", "DcV"
+    ];
+    
+    let scaled = bigNum;
+    let suffixIndex = 0;
+    const thousand = 1000n;
+    
+    while (scaled >= thousand && suffixIndex < suffixes.length - 1) {
+        scaled = scaled / thousand;
+        suffixIndex++;
+    }
+    
+    const divisor = thousand ** BigInt(suffixIndex);
+    const remainder = (bigNum % divisor) * 100n / divisor;
+    
+    if (suffixIndex > 0 && remainder > 0n) {
+        const decStr = remainder.toString().padStart(2, '0').slice(0, 2).replace(/0+$/, '');
+        return decStr ? `${scaled}.${decStr}${suffixes[suffixIndex]}` : `${scaled}${suffixes[suffixIndex]}`;
+    }
+    
+    if (suffixIndex === 0) {
+        return bigNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+    
+    return `${scaled}${suffixes[suffixIndex]}`;
 }
 
 async function getUserCash(userId) {
@@ -79,13 +92,15 @@ async function getUserCash(userId) {
 async function updateUserCash(userId, amount) {
     const bigAmount = toBigInt(amount);
     try {
-        if (bigAmount >= 0n) {
+        if (bigAmount > 0n) {
             await axios.post(`${CASH_API_URL}/${userId}/add`, { amount: bigAmount.toString() });
-        } else {
+        } else if (bigAmount < 0n) {
             await axios.post(`${CASH_API_URL}/${userId}/subtract`, { amount: (-bigAmount).toString() });
         }
+        return true;
     } catch (error) {
         console.error("Cash API Update Error:", error.message);
+        return false;
     }
 }
 
@@ -295,7 +310,7 @@ function formatStyledMessage(contentLines) {
 module.exports = {
     config: {
         name: "slot",
-        version: "4.0",
+        version: "5.0",
         author: "Itachi Soma",
         countDown: 3,
         role: 0,
@@ -311,34 +326,47 @@ module.exports = {
         async function parseAmountWithSuffix(input) {
             if (!input) return 0n;
             const strInput = String(input).toLowerCase().trim();
+            
             try {
-                const response = await axios.get(`${CONVERT_API_URL}?input=${encodeURIComponent(strInput)}`);
-                if (response.data && response.data.success && response.data.result) {
-                    return toBigInt(response.data.result);
+                const response = await axios.get(`${CONVERT_API_URL}?n=${encodeURIComponent(strInput)}`);
+                if (response.data && response.data.success && response.data.raw) {
+                    return toBigInt(response.data.raw);
                 }
-            } catch (error) {}
+            } catch (error) {
+                console.error("Parse amount API error:", error.message);
+            }
+            
             const SUFFIXES = {
-                'k': 1_000n, 'm': 1_000_000n, 'b': 1_000_000_000n,
-                't': 1_000_000_000_000n, 'q': 1_000_000_000_000_000n,
-                'Q': 1_000_000_000_000_000_000n,
-                's': 1_000_000_000_000_000_000_000n,
-                'S': 1_000_000_000_000_000_000_000_000n,
-                'o': 1_000_000_000_000_000_000_000_000_000n,
-                'n': 1_000_000_000_000_000_000_000_000_000_000n,
-                'd': 1_000_000_000_000_000_000_000_000_000_000_000n
+                'k': 1_000n, 
+                'm': 1_000_000n, 
+                'b': 1_000_000_000n,
+                't': 1_000_000_000_000n, 
+                'qa': 1_000_000_000_000_000n,
+                'qi': 1_000_000_000_000_000_000n,
+                'sx': 1_000_000_000_000_000_000_000n,
+                'sp': 1_000_000_000_000_000_000_000_000n,
+                'oc': 1_000_000_000_000_000_000_000_000_000n,
+                'no': 1_000_000_000_000_000_000_000_000_000_000n,
+                'dc': 1_000_000_000_000_000_000_000_000_000_000_000n
             };
+            
             const scientificMatch = strInput.match(/^(\d+(?:\.\d+)?)e(\d+)$/i);
             if (scientificMatch) {
                 return toBigInt(Math.floor(parseFloat(scientificMatch[1]) * Math.pow(10, parseInt(scientificMatch[2]))));
             }
-            const match = strInput.match(/^(\d+(?:\.\d+)?)([a-zA-Z]?)$/);
+            
+            const match = strInput.match(/^(\d+(?:\.\d+)?)([a-zA-Z]+)?$/);
             if (!match) return 0n;
+            
             const value = parseFloat(match[1]);
-            const suffix = match[2];
+            const suffix = (match[2] || "").toLowerCase();
+            
             if (isNaN(value)) return 0n;
+            
             if (suffix && SUFFIXES[suffix]) {
                 return toBigInt(Math.floor(value)) * SUFFIXES[suffix];
             }
+            
             return toBigInt(Math.floor(value));
         }
 
@@ -347,7 +375,11 @@ module.exports = {
         const bankPath = "./bank.json";
         let bankData = {};
         if (fs.existsSync(bankPath)) {
-            bankData = JSON.parse(fs.readFileSync(bankPath, "utf8"));
+            try {
+                bankData = JSON.parse(fs.readFileSync(bankPath, "utf8"));
+            } catch (e) {
+                bankData = {};
+            }
         }
 
         const userBank = bankData[senderID] || { bank: 0, imageMode: true };
@@ -442,17 +474,39 @@ module.exports = {
         }
 
         const emojiSlots = ["🤍", "🖤", "💚", "🖤", "🤍", "💚", "💚", "🖤", "🤍"];
-        const slot1 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
-        const slot2 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
-        const slot3 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
-
-        const result = calculateWinnings(slot1, slot2, slot3, amount);
-        const win = result.win;
-        const winAmount = result.winAmount;
-        const multiplier = result.multiplier;
+        
+        let slot1, slot2, slot3, result, win, winAmount, multiplier;
+        let attempts = 0;
+        const maxAttempts = 100;
+        
+        do {
+            slot1 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
+            slot2 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
+            slot3 = emojiSlots[Math.floor(Math.random() * emojiSlots.length)];
+            
+            result = calculateWinnings(slot1, slot2, slot3, amount);
+            
+            const forceWin = Math.random() < 0.50;
+            
+            if (forceWin && !result.win && attempts < maxAttempts) {
+                attempts++;
+                continue;
+            }
+            
+            break;
+        } while (attempts < maxAttempts);
+        
+        win = result.win;
+        winAmount = result.winAmount;
+        multiplier = result.multiplier;
 
         useSpin(senderID);
-        await updateUserCash(senderID, winAmount);
+        
+        const updateSuccess = await updateUserCash(senderID, winAmount);
+        if (!updateSuccess) {
+            return message.reply(formatStyledMessage(["❌ Erreur lors de la mise à jour du solde"]));
+        }
+        
         const newBalance = await getUserCash(senderID);
         const updatedStats = getRemainingSpins(senderID);
 
@@ -495,13 +549,15 @@ module.exports = {
                     username, amount, win, winAmount,
                     newBalance, displaySlots, multiplier, updatedStats.spins, avatarUrl
                 );
-                const imgPath = `./slot_card_${senderID}.png`;
+                const imgPath = `./slot_card_${senderID}_${Date.now()}.png`;
                 fs.writeFileSync(imgPath, cardImage);
                 await message.reply({
                     body: "💳 Recapitulatif sur votre carte bancaire :",
                     attachment: fs.createReadStream(imgPath)
                 });
-                fs.unlinkSync(imgPath);
+                setTimeout(() => {
+                    try { fs.unlinkSync(imgPath); } catch (e) {}
+                }, 5000);
             } catch (error) {
                 console.error("Erreur generation carte:", error);
             }
