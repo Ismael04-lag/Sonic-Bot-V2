@@ -17,41 +17,54 @@ function toBigInt(value) {
     }
 }
 
-function isInfinity(value) {
-    if (typeof value === 'bigint') return value > BigInt("9".repeat(260));
-    return !isFinite(Number(value)) || Number(value) >= 1e260;
-}
-
-function formatBigInt(num) {
-    if (isInfinity(num)) return "∞";
-    if (num === 0n) return "0";
- const suffixes = ["", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "Dq", "Dz", "Qs", "Qo", "Qu"];
-    let i = 0;
-    let scaled = num;
-    const thousand = 1000n;
-    while (scaled >= thousand && i < suffixes.length - 1) {
-        scaled = scaled / thousand;
-        i++;
-    }
-    const remainder = i > 0 ? (num % (thousand ** BigInt(i))) / (thousand ** BigInt(i - 1)) : 0n;
-    if (i > 0 && remainder > 0n) return `${scaled}.${remainder}${suffixes[i]}`;
-    return `${scaled}${suffixes[i]}`;
-}
-
 async function formatNumber(num) {
-    if (isInfinity(num)) return "∞";
     const bigNum = toBigInt(num);
+    if (bigNum === 0n) return "0";
+    
     try {
-        const response = await axios.get(`${CONVERT_API_URL}?number=${bigNum.toString()}`, { timeout: 5000 });
+        const response = await axios.get(`${CONVERT_API_URL}?n=${bigNum.toString()}`, { timeout: 5000 });
         if (response.data && response.data.success) return response.data.formatted;
-    } catch (error) {}
-    return formatBigInt(bigNum);
+    } catch (error) {
+        console.error("Conversion API error:", error.message);
+    }
+    
+    const suffixes = [
+        "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", 
+        "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", 
+        "OcDc", "NoDc", "V", "UV", "DV", "TV", "QaV", "QiV", "SxV", 
+        "SpV", "OcV", "NoV", "DcV"
+    ];
+    
+    let scaled = bigNum;
+    let suffixIndex = 0;
+    const thousand = 1000n;
+    
+    while (scaled >= thousand && suffixIndex < suffixes.length - 1) {
+        scaled = scaled / thousand;
+        suffixIndex++;
+    }
+    
+    const divisor = thousand ** BigInt(suffixIndex);
+    const remainder = (bigNum % divisor) * 100n / divisor;
+    
+    if (suffixIndex > 0 && remainder > 0n) {
+        const decStr = remainder.toString().padStart(2, '0').slice(0, 2).replace(/0+$/, '');
+        return decStr ? `${scaled}.${decStr}${suffixes[suffixIndex]}` : `${scaled}${suffixes[suffixIndex]}`;
+    }
+    
+    if (suffixIndex === 0) {
+        return bigNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+    
+    return `${scaled}${suffixes[suffixIndex]}`;
 }
 
 async function getUserCash(userId) {
     try {
         const response = await axios.get(`${CASH_API_URL}/${userId}`, { timeout: 10000 });
-        if (response.data.success) return toBigInt(response.data.data.cash);
+        if (response.data && response.data.success && response.data.data) {
+            return toBigInt(response.data.data.cash);
+        }
     } catch (error) {
         console.error("Cash API Error:", error.message);
     }
@@ -61,7 +74,7 @@ async function getUserCash(userId) {
 async function getUserBankData(userId) {
     try {
         const response = await axios.get(`${BANK_API_URL}/${userId}`, { timeout: 10000 });
-        if (response.data.success) {
+        if (response.data && response.data.success && response.data.data) {
             return {
                 bank: toBigInt(response.data.data.bank || "0"),
                 card: response.data.data.card || null
@@ -91,8 +104,8 @@ function getUserInfo(uid, api) {
 
 async function getAvatarUrl(uid, api) {
     try {
-        const info = await api.getUserInfo(uid);
-        return info[uid]?.thumbSrc || `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
+        const info = await getUserInfo(uid, api);
+        return info.thumbSrc || `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
     } catch(e) {
         return `https://graph.facebook.com/${uid}/picture?width=200&height=200`;
     }
@@ -107,43 +120,46 @@ function formatStyledMessage(contentLines) {
     return msg;
 }
 
-async function generateRealisticBalanceCard(userInfo, bankData, cashMoney, api) {
-    const width = 600;
-    const height = 380;
+async function generatePremiumBalanceCard(userInfo, bankData, cashMoney, api) {
+    const width = 650;
+    const height = 420;
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = "transparent";
-
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#1a1c2b");
-    gradient.addColorStop(0.5, "#0f1023");
-    gradient.addColorStop(1, "#0a0a1a");
-    ctx.fillStyle = gradient;
+    const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+    bgGradient.addColorStop(0, "#0a0a1a");
+    bgGradient.addColorStop(0.3, "#1a1c2b");
+    bgGradient.addColorStop(0.7, "#0f1023");
+    bgGradient.addColorStop(1, "#050510");
+    ctx.fillStyle = bgGradient;
     ctx.fillRect(0, 0, width, height);
 
-    for (let i = 0; i < width; i += 4) {
+    ctx.strokeStyle = "rgba(212, 175, 55, 0.15)";
+    ctx.lineWidth = 1;
+    for (let i = 0; i < height; i += 30) {
         ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i + 2, height);
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.moveTo(0, i);
+        ctx.lineTo(width, i);
         ctx.stroke();
     }
 
-    ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(8, 8, width - 16, height - 16);
+    const borderGradient = ctx.createLinearGradient(0, 0, width, height);
+    borderGradient.addColorStop(0, "#d4af37");
+    borderGradient.addColorStop(0.5, "#ffd700");
+    borderGradient.addColorStop(1, "#b8960c");
+    ctx.strokeStyle = borderGradient;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, width - 24, height - 24);
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-    ctx.fillRect(0, 50, width, 60);
+    ctx.fillStyle = "rgba(212, 175, 55, 0.08)";
+    ctx.fillRect(0, 55, width, 70);
 
     ctx.fillStyle = "#d4af37";
-    ctx.font = "bold 18px 'Courier New'";
-    ctx.fillText("HEDGEHOG", 25, 45);
-    ctx.font = "10px 'Courier New'";
-    ctx.fillStyle = "rgba(212, 175, 55, 0.7)";
-    ctx.fillText("BALANCE CARD", 25, 62);
+    ctx.font = "bold 20px 'Courier New'";
+    ctx.fillText("🏦 HEDGEHOG BANK", 30, 48);
+    ctx.font = "11px 'Courier New'";
+    ctx.fillStyle = "rgba(212, 175, 55, 0.8)";
+    ctx.fillText("BALANCE CARD • PREMIUM", 30, 68);
 
     const avatarUrl = await getAvatarUrl(userInfo.id, api);
     if (avatarUrl) {
@@ -151,91 +167,114 @@ async function generateRealisticBalanceCard(userInfo, bankData, cashMoney, api) 
             const avatar = await loadImage(avatarUrl);
             ctx.save();
             ctx.beginPath();
-            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.arc(width - 55, 55, 38, 0, Math.PI * 2);
             ctx.closePath();
             ctx.clip();
-            ctx.drawImage(avatar, width - 85, 15, 70, 70);
+            ctx.drawImage(avatar, width - 93, 17, 76, 76);
             ctx.restore();
             ctx.beginPath();
-            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.arc(width - 55, 55, 38, 0, Math.PI * 2);
             ctx.strokeStyle = "#d4af37";
             ctx.lineWidth = 2.5;
             ctx.stroke();
-        } catch (e) {
-            ctx.fillStyle = "#d4af37";
             ctx.beginPath();
-            ctx.arc(width - 50, 50, 35, 0, Math.PI * 2);
+            ctx.arc(width - 55, 55, 42, 0, Math.PI * 2);
+            ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        } catch (e) {
+            ctx.fillStyle = "rgba(212, 175, 55, 0.2)";
+            ctx.beginPath();
+            ctx.arc(width - 55, 55, 38, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = "#fff";
-            ctx.font = "28px 'Courier New'";
-            ctx.fillText("👤", width - 68, 68);
+            ctx.fillStyle = "#d4af37";
+            ctx.font = "30px 'Courier New'";
+            ctx.fillText("👤", width - 72, 68);
         }
     }
 
-    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.fillStyle = "rgba(212, 175, 55, 0.1)";
     ctx.beginPath();
-    ctx.roundRect(25, 85, 70, 45, 8);
+    ctx.roundRect(30, 90, 85, 50, 10);
     ctx.fill();
+    ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = "#d4af37";
-    ctx.font = "bold 12px 'Courier New'";
-    ctx.fillText("CHIP", 48, 112);
+    ctx.font = "bold 13px 'Courier New'";
+    ctx.fillText("CHIP", 58, 120);
     for (let i = 0; i < 6; i++) {
         ctx.fillStyle = i % 2 === 0 ? "#d4af37" : "#b8960c";
-        ctx.fillRect(30 + i * 8, 118, 3, 5);
+        ctx.fillRect(35 + i * 8, 128, 3, 5);
     }
 
+    ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.fillRect(25, 150, width - 50, 3);
+
+    const cardNumber = bankData.card?.cardNumber || "4532 **** **** 5772";
     ctx.fillStyle = "#e0e0e0";
-    ctx.font = "bold 20px 'Courier New'";
-    let cardNumber = bankData.card?.cardNumber || "4532 **** **** 5772";
-    const cardNumbers = cardNumber.split(" ");
-    let formattedNumber = "";
-    for (let i = 0; i < cardNumbers.length; i++) {
-        if (cardNumbers[i] === "****") {
-            formattedNumber += "****";
-        } else {
-            formattedNumber += cardNumbers[i];
-        }
-        if (i < cardNumbers.length - 1) formattedNumber += " ";
-    }
-    ctx.fillText(formattedNumber, 25, 160);
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-    ctx.font = "9px 'Courier New'";
-    ctx.fillText("VALID", 25, 188);
-    ctx.fillText("THRU", 25, 200);
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 13px 'Courier New'";
-    const expiry = bankData.card?.cardExpiry || "12/28";
-    ctx.fillText(expiry, 25, 218);
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 15px 'Courier New'";
-    const cardHolderName = userInfo.name.toUpperCase().substring(0, 22);
-    ctx.fillText(cardHolderName, 25, 260);
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-    ctx.font = "8px 'Courier New'";
-    ctx.fillText(`ID: ${userInfo.id}`, 25, 277);
+    ctx.font = "bold 24px 'Courier New'";
+    ctx.fillText(cardNumber, 30, 195);
 
     ctx.fillStyle = "rgba(212, 175, 55, 0.15)";
-    ctx.fillRect(width - 170, height - 75, 155, 55);
+    ctx.fillRect(30, 215, 160, 50);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("VALID THRU", 40, 235);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 15px 'Courier New'";
+    const expiry = bankData.card?.cardExpiry || "12/28";
+    ctx.fillText(expiry, 40, 255);
+
+    ctx.fillStyle = "rgba(212, 175, 55, 0.15)";
+    ctx.fillRect(200, 215, 180, 50);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText("CARD TYPE", 210, 235);
     ctx.fillStyle = "#d4af37";
-    ctx.font = "bold 26px 'Courier New'";
-    ctx.fillText(`${await formatNumber(cashMoney)}$`, width - 165, height - 35);
+    ctx.font = "bold 13px 'Courier New'";
+    ctx.fillText("PREMIUM", 210, 255);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px 'Courier New'";
+    const cardHolderName = userInfo.name.toUpperCase().substring(0, 25);
+    ctx.fillText(cardHolderName, 30, 305);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.font = "9px 'Courier New'";
+    ctx.fillText(`ACCOUNT ID: ${userInfo.id}`, 30, 325);
+
+    ctx.fillStyle = "rgba(212, 175, 55, 0.1)";
+    ctx.fillRect(width - 200, height - 100, 175, 75);
+    ctx.strokeStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(width - 200, height - 100, 175, 75);
+
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 28px 'Courier New'";
+    const formattedCash = await formatNumber(cashMoney);
+    ctx.fillText(`${formattedCash}$`, width - 195, height - 65);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText("CASH BALANCE", width - 195, height - 85);
 
     const formattedBank = await formatNumber(bankData.bank);
-    ctx.fillStyle = "#88ff88";
-    ctx.font = "11px 'Courier New'";
-    ctx.fillText(`BANQUE: ${formattedBank}$`, width - 165, height - 55);
+    const totalAmount = await formatNumber(cashMoney + bankData.bank);
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-    ctx.fillRect(0, height - 22, width, 22);
-    ctx.fillStyle = "rgba(212, 175, 55, 0.5)";
-    ctx.font = "8px 'Courier New'";
-    const d = new Date();
-    ctx.fillText(`HEDGEHOG BANK • PREMIUM • BALANCE`, width / 2 - 145, height - 8);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+    ctx.font = "10px 'Courier New'";
+    ctx.fillText(`BANK: ${formattedBank}$`, width - 195, height - 45);
+    ctx.fillText(`TOTAL: ${totalAmount}$`, width - 195, height - 30);
+
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.fillRect(0, height - 28, width, 28);
+    ctx.fillStyle = "rgba(212, 175, 55, 0.6)";
+    ctx.font = "9px 'Courier New'";
+    const date = new Date().toISOString().split('T')[0];
+    ctx.fillText(`HEDGEHOG BANK • PREMIUM • ${date}`, width / 2 - 145, height - 12);
     ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
-    ctx.fillText("💰", width - 85, height - 8);
+    ctx.fillText("💳", width - 80, height - 12);
 
     return canvas.toBuffer();
 }
@@ -244,7 +283,7 @@ module.exports = {
     config: {
         name: "balance",
         aliases: ["bal"],
-        version: "3.0",
+        version: "4.0",
         author: "Ismael Soma",
         countDown: 5,
         role: 0,
@@ -258,21 +297,24 @@ module.exports = {
             if (Object.keys(event.mentions).length > 0) {
                 const uids = Object.keys(event.mentions);
                 for (const uid of uids) {
-                    const userMoney = await getUserCash(uid);
-                    const bankData = await getUserBankData(uid);
-                    const userInfo = await getUserInfo(uid, api);
+                    const [userMoney, bankData, userInfo] = await Promise.all([
+                        getUserCash(uid),
+                        getUserBankData(uid),
+                        getUserInfo(uid, api)
+                    ]);
 
                     const formattedMoney = await formatNumber(userMoney);
                     const formattedBank = await formatNumber(bankData.bank);
+                    const formattedTotal = await formatNumber(userMoney + bankData.bank);
 
-                    const img = await generateRealisticBalanceCard(
-                        { id: uid, name: userInfo.name },
+                    const img = await generatePremiumBalanceCard(
+                        userInfo,
                         bankData,
                         userMoney,
                         api
                     );
 
-                    const imgPath = path.join(__dirname, `balance_${uid}.png`);
+                    const imgPath = path.join(__dirname, `balance_${uid}_${Date.now()}.png`);
                     fs.writeFileSync(imgPath, img);
 
                     await message.reply({
@@ -283,32 +325,37 @@ module.exports = {
                             `💰 POCHE: ${formattedMoney}$`,
                             `🏦 BANQUE: ${formattedBank}$`,
                             `━━━━━━━━━━━━━━━━━━`,
-                            `💵 TOTAL: ${await formatNumber(userMoney + bankData.bank)}$`
+                            `💵 TOTAL: ${formattedTotal}$`
                         ]),
                         attachment: fs.createReadStream(imgPath)
                     });
 
-                    fs.unlinkSync(imgPath);
+                    setTimeout(() => {
+                        try { fs.unlinkSync(imgPath); } catch (e) {}
+                    }, 5000);
                 }
                 return;
             }
 
             const uid = event.senderID;
-            const userMoney = await getUserCash(uid);
-            const bankData = await getUserBankData(uid);
-            const userInfo = await getUserInfo(uid, api);
+            const [userMoney, bankData, userInfo] = await Promise.all([
+                getUserCash(uid),
+                getUserBankData(uid),
+                getUserInfo(uid, api)
+            ]);
 
             const formattedMoney = await formatNumber(userMoney);
             const formattedBank = await formatNumber(bankData.bank);
+            const formattedTotal = await formatNumber(userMoney + bankData.bank);
 
-            const img = await generateRealisticBalanceCard(
-                { id: uid, name: userInfo.name },
+            const img = await generatePremiumBalanceCard(
+                userInfo,
                 bankData,
                 userMoney,
                 api
             );
 
-            const imgPath = path.join(__dirname, `balance_${uid}.png`);
+            const imgPath = path.join(__dirname, `balance_${uid}_${Date.now()}.png`);
             fs.writeFileSync(imgPath, img);
 
             await message.reply({
@@ -319,12 +366,14 @@ module.exports = {
                     `💰 POCHE: ${formattedMoney}$`,
                     `🏦 BANQUE: ${formattedBank}$`,
                     `━━━━━━━━━━━━━━━━━━`,
-                    `💵 TOTAL: ${await formatNumber(userMoney + bankData.bank)}$`
+                    `💵 TOTAL: ${formattedTotal}$`
                 ]),
                 attachment: fs.createReadStream(imgPath)
             });
 
-            fs.unlinkSync(imgPath);
+            setTimeout(() => {
+                try { fs.unlinkSync(imgPath); } catch (e) {}
+            }, 5000);
 
         } catch (error) {
             console.error("Balance error:", error);
