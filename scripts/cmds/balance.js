@@ -7,6 +7,8 @@ const CASH_API_URL = "https://cash-api-five.vercel.app/api/cash";
 const BANK_API_URL = "https://hedgehog-bank-api.vercel.app/api/bank";
 const CONVERT_API_URL = "https://numbers-conversion.vercel.app/api/format";
 
+const MAX_LIMIT = 10n ** 261n;
+
 function toBigInt(value) {
     if (typeof value === 'bigint') return value;
     if (value === undefined || value === null) return 0n;
@@ -19,11 +21,16 @@ function toBigInt(value) {
 
 async function formatNumber(num) {
     const bigNum = toBigInt(num);
+    
     if (bigNum === 0n) return "0";
+    if (bigNum >= MAX_LIMIT || bigNum <= -MAX_LIMIT) return "∞";
     
     try {
         const response = await axios.get(`${CONVERT_API_URL}?n=${bigNum.toString()}`, { timeout: 5000 });
-        if (response.data && response.data.success) return response.data.formatted;
+        if (response.data && response.data.success) {
+            if (response.data.isInfinity) return "∞";
+            return response.data.formatted;
+        }
     } catch (error) {
         console.error("Conversion API error:", error.message);
     }
@@ -31,8 +38,14 @@ async function formatNumber(num) {
     const suffixes = [
         "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", 
         "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", 
-        "OcDc", "NoDc", "V", "UV", "DV", "TV", "QaV", "QiV", "SxV", 
-        "SpV", "OcV", "NoV", "DcV"
+        "OcDc", "NoDc", "kN", "MN", "BN", "TN", "QaN", "QiN", "SxN", 
+        "SpN", "OcN", "NoN", "DcN", "UI", "DI", "TI", "QI", "QiI", 
+        "SxI", "SpI", "OcI", "NoI", "DcI", "UV", "DV", "TV", "QV", 
+        "QiV", "SxV", "SpV", "OcV", "NoV", "DcV", "UT", "DT", "TT", 
+        "QT", "QiT", "SxT", "SpT", "OcT", "NoT", "DcT", "UTr", "DTr", 
+        "TTr", "QTr", "QiTr", "SxTr", "SpTr", "OcTr", "NoTr", "DcTr", 
+        "UQ", "DQ", "TQ", "QQ", "QiQ", "SxQ", "SpQ", "OcQ", "NoQ", 
+        "DcQ", "Uc", "Du", "Tu", "Qu", "Qiu"
     ];
     
     let scaled = bigNum;
@@ -43,6 +56,8 @@ async function formatNumber(num) {
         scaled = scaled / thousand;
         suffixIndex++;
     }
+    
+    if (suffixIndex === suffixes.length - 1 && scaled >= thousand) return "∞";
     
     const divisor = thousand ** BigInt(suffixIndex);
     const remainder = (bigNum % divisor) * 100n / divisor;
@@ -63,7 +78,9 @@ async function getUserCash(userId) {
     try {
         const response = await axios.get(`${CASH_API_URL}/${userId}`, { timeout: 10000 });
         if (response.data && response.data.success && response.data.data) {
-            return toBigInt(response.data.data.cash);
+            const cashValue = toBigInt(response.data.data.cash);
+            if (cashValue >= MAX_LIMIT) return MAX_LIMIT;
+            return cashValue;
         }
     } catch (error) {
         console.error("Cash API Error:", error.message);
@@ -75,8 +92,9 @@ async function getUserBankData(userId) {
     try {
         const response = await axios.get(`${BANK_API_URL}/${userId}`, { timeout: 10000 });
         if (response.data && response.data.success && response.data.data) {
+            const bankValue = toBigInt(response.data.data.bank || "0");
             return {
-                bank: toBigInt(response.data.data.bank || "0"),
+                bank: bankValue >= MAX_LIMIT ? MAX_LIMIT : bankValue,
                 card: response.data.data.card || null
             };
         }
@@ -250,9 +268,9 @@ async function generatePremiumBalanceCard(userInfo, bankData, cashMoney, api) {
     ctx.lineWidth = 1;
     ctx.strokeRect(width - 200, height - 100, 175, 75);
 
+    const formattedCash = await formatNumber(cashMoney);
     ctx.fillStyle = "#d4af37";
     ctx.font = "bold 28px 'Courier New'";
-    const formattedCash = await formatNumber(cashMoney);
     ctx.fillText(`${formattedCash}$`, width - 195, height - 65);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
@@ -260,12 +278,13 @@ async function generatePremiumBalanceCard(userInfo, bankData, cashMoney, api) {
     ctx.fillText("CASH BALANCE", width - 195, height - 85);
 
     const formattedBank = await formatNumber(bankData.bank);
-    const totalAmount = await formatNumber(cashMoney + bankData.bank);
+    const totalAmount = cashMoney >= MAX_LIMIT || bankData.bank >= MAX_LIMIT ? MAX_LIMIT : cashMoney + bankData.bank;
+    const formattedTotal = await formatNumber(totalAmount);
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
     ctx.font = "10px 'Courier New'";
     ctx.fillText(`BANK: ${formattedBank}$`, width - 195, height - 45);
-    ctx.fillText(`TOTAL: ${totalAmount}$`, width - 195, height - 30);
+    ctx.fillText(`TOTAL: ${formattedTotal}$`, width - 195, height - 30);
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
     ctx.fillRect(0, height - 28, width, 28);
@@ -283,7 +302,7 @@ module.exports = {
     config: {
         name: "balance",
         aliases: ["bal"],
-        version: "4.0",
+        version: "5.0",
         author: "Ismael Soma",
         countDown: 5,
         role: 0,
@@ -305,7 +324,8 @@ module.exports = {
 
                     const formattedMoney = await formatNumber(userMoney);
                     const formattedBank = await formatNumber(bankData.bank);
-                    const formattedTotal = await formatNumber(userMoney + bankData.bank);
+                    const totalAmount = userMoney >= MAX_LIMIT || bankData.bank >= MAX_LIMIT ? MAX_LIMIT : userMoney + bankData.bank;
+                    const formattedTotal = await formatNumber(totalAmount);
 
                     const img = await generatePremiumBalanceCard(
                         userInfo,
@@ -346,7 +366,8 @@ module.exports = {
 
             const formattedMoney = await formatNumber(userMoney);
             const formattedBank = await formatNumber(bankData.bank);
-            const formattedTotal = await formatNumber(userMoney + bankData.bank);
+            const totalAmount = userMoney >= MAX_LIMIT || bankData.bank >= MAX_LIMIT ? MAX_LIMIT : userMoney + bankData.bank;
+            const formattedTotal = await formatNumber(totalAmount);
 
             const img = await generatePremiumBalanceCard(
                 userInfo,
