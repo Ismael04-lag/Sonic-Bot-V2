@@ -731,11 +731,11 @@ module.exports = function (defaultFuncs, api, ctx) {
     //         }
 
     //         return attemptRequest()
-    // 		.catch((err) => {
-    // 			log.error("getSeqId", err);
-    // 			if (utils.getType(err) == "Object" && err.error === "Not logged in") ctx.loggedIn = false;
-    // 			return globalCallback(err);
-    // 		});
+    //                 .catch((err) => {
+    //                         log.error("getSeqId", err);
+    //                         if (utils.getType(err) == "Object" && err.error === "Not logged in") ctx.loggedIn = false;
+    //                         return globalCallback(err);
+    //                 });
     //       }
 
     getSeqID = function getSeqID() {
