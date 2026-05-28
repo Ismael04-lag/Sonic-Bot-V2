@@ -13,5 +13,5 @@ jobs:
     steps:
       - name: Ping Render Bot
         run: |
-          curl -I https://sonic-bot-v2-qjpm.onrender.com
+          curl -I https://sonic-gpt.onrender.com
           echo "✅ Ping envoyé à $(date)"
