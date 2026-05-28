@@ -6,6 +6,8 @@ const axios = require("axios");
 const FORMAT_URL = "https://numbers-conversion.vercel.app/api/format";
 const CASH_URL   = "https://cash-api-five.vercel.app/api/cash";
 
+const MAX_LIMIT = 10n ** 261n;
+
 const STATS_FILE = path.join(__dirname, "tictactoe_stats.json");
 const ASSETS_DIR = path.join(__dirname, "tictactoe_assets");
 
@@ -38,78 +40,206 @@ function toBigInt(v) {
     try { return BigInt(String(v).split(".")[0].replace(/[^0-9\-]/g, "") || "0"); }
     catch { return 0n; }
 }
-function localFormat(big) {
-    big = toBigInt(big);
-    if (big < 0n) return "-" + localFormat(-big);
-    if (big === 0n) return "0";
-    if (big > 10n ** 260n) return "∞";
-    const tiers = [
-        { v: 10n**51n, s: "Qt"  }, { v: 10n**48n, s: "Qo"  }, { v: 10n**45n, s: "Qs"  },
-        { v: 10n**42n, s: "Dz"  }, { v: 10n**39n, s: "Dq"  }, { v: 10n**36n, s: "Ud"  },
-        { v: 10n**33n, s: "De"  }, { v: 10n**30n, s: "Non" }, { v: 10n**27n, s: "Oct" },
-        { v: 10n**24n, s: "Sep" }, { v: 10n**21n, s: "Sxt" }, { v: 10n**18n, s: "Qin" },
-        { v: 10n**15n, s: "Qd"  }, { v: 10n**12n, s: "Tr"  }, { v: 10n**9n,  s: "Md"  },
-        { v: 10n**6n,  s: "M"   }, { v: 10n**3n,  s: "k"   },
-    ];
-    for (const { v, s } of tiers) {
-        if (big >= v) {
-            const i = big / v;
-            const dec = Number((big % v) * 100n / v).toString().padStart(2, "0").replace(/0+$/, "");
-            return dec ? `${i}.${dec}${s}` : `${i}${s}`;
-        }
-    }
-    return big.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-const fmtCache = new Map();
+
 async function formatNumber(num) {
     const big = toBigInt(num);
-    const key = big.toString();
-    if (fmtCache.has(key)) return fmtCache.get(key);
+    
+    if (big === 0n) return "0";
+    if (big >= MAX_LIMIT || big <= -MAX_LIMIT) return "∞";
+    
     try {
-        const r = await axios.get(`${FORMAT_URL}?number=${key}`, { timeout: 3000 });
+        const r = await axios.get(`${FORMAT_URL}?n=${big.toString()}`, { timeout: 5000 });
         if (r.data?.success) {
-            fmtCache.set(key, r.data.formatted);
-            if (fmtCache.size > 500) fmtCache.delete(fmtCache.keys().next().value);
+            if (r.data.isInfinity) return "∞";
             return r.data.formatted;
         }
     } catch {}
-    return localFormat(big);
+    
+    const suffixes = [
+        "", "k", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", 
+        "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", 
+        "OcDc", "NoDc", "kN", "MN", "BN", "TN", "QaN", "QiN", "SxN", 
+        "SpN", "OcN", "NoN", "DcN", "UI", "DI", "TI", "QI", "QiI", 
+        "SxI", "SpI", "OcI", "NoI", "DcI", "UV", "DV", "TV", "QV", 
+        "QiV", "SxV", "SpV", "OcV", "NoV", "DcV", "UT", "DT", "TT", 
+        "QT", "QiT", "SxT", "SpT", "OcT", "NoT", "DcT", "UTr", "DTr", 
+        "TTr", "QTr", "QiTr", "SxTr", "SpTr", "OcTr", "NoTr", "DcTr", 
+        "UQ", "DQ", "TQ", "QQ", "QiQ", "SxQ", "SpQ", "OcQ", "NoQ", 
+        "DcQ", "Uc", "Du", "Tu", "Qu", "Qiu"
+    ];
+    
+    let scaled = big;
+    let suffixIndex = 0;
+    const thousand = 1000n;
+    
+    while (scaled >= thousand && suffixIndex < suffixes.length - 1) {
+        scaled = scaled / thousand;
+        suffixIndex++;
+    }
+    
+    if (suffixIndex === suffixes.length - 1 && scaled >= thousand) return "∞";
+    
+    const divisor = thousand ** BigInt(suffixIndex);
+    const remainder = (big % divisor) * 100n / divisor;
+    
+    if (suffixIndex > 0 && remainder > 0n) {
+        const decStr = remainder.toString().padStart(2, '0').slice(0, 2).replace(/0+$/, '');
+        return decStr ? `${scaled}.${decStr}${suffixes[suffixIndex]}` : `${scaled}${suffixes[suffixIndex]}`;
+    }
+    
+    if (suffixIndex === 0) {
+        return big.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    }
+    
+    return `${scaled}${suffixes[suffixIndex]}`;
 }
+
 const SFX = {
-    k: 1_000n, m: 1_000_000n, md: 1_000_000_000n, b: 1_000_000_000n,
-    tr: 10n**12n, qd: 10n**15n, qin: 10n**18n, sxt: 10n**21n,
-    sep: 10n**24n, oct: 10n**27n, non: 10n**30n, de: 10n**33n,
-    ud: 10n**36n, dq: 10n**39n, dz: 10n**42n, qs: 10n**45n,
-    qo: 10n**48n, qt: 10n**51n, qa: 10n**75n, qi: 10n**78n,
-    sx: 10n**81n, sp: 10n**84n, oc: 10n**87n, no: 10n**90n, dc: 10n**93n,
+    k: 1_000n,
+    m: 1_000_000n,
+    b: 1_000_000_000n,
+    t: 1_000_000_000_000n,
+    qa: 10n**15n,
+    qi: 10n**18n,
+    sx: 10n**21n,
+    sp: 10n**24n,
+    oc: 10n**27n,
+    no: 10n**30n,
+    dc: 10n**33n,
+    udc: 10n**36n,
+    ddc: 10n**39n,
+    tdc: 10n**42n,
+    qadc: 10n**45n,
+    qidc: 10n**48n,
+    sxdc: 10n**51n,
+    spdc: 10n**54n,
+    ocdc: 10n**57n,
+    nodc: 10n**60n,
+    kn: 10n**63n,
+    mn: 10n**66n,
+    bn: 10n**69n,
+    tn: 10n**72n,
+    qan: 10n**75n,
+    qin: 10n**78n,
+    sxn: 10n**81n,
+    spn: 10n**84n,
+    ocn: 10n**87n,
+    non: 10n**90n,
+    dcn: 10n**93n,
+    ui: 10n**96n,
+    di: 10n**99n,
+    ti: 10n**102n,
+    qi_i: 10n**105n,
+    qii: 10n**108n,
+    sxi: 10n**111n,
+    spi: 10n**114n,
+    oci: 10n**117n,
+    noi: 10n**120n,
+    dci: 10n**123n,
+    uv: 10n**126n,
+    dv: 10n**129n,
+    tv: 10n**132n,
+    qv: 10n**135n,
+    qiv: 10n**138n,
+    sxv: 10n**141n,
+    spv: 10n**144n,
+    ocv: 10n**147n,
+    nov: 10n**150n,
+    dcv: 10n**153n,
+    ut: 10n**156n,
+    dt: 10n**159n,
+    tt: 10n**162n,
+    qt: 10n**165n,
+    qit: 10n**168n,
+    sxt: 10n**171n,
+    spt: 10n**174n,
+    oct: 10n**177n,
+    not: 10n**180n,
+    dct: 10n**183n,
+    utr: 10n**186n,
+    dtr: 10n**189n,
+    ttr: 10n**192n,
+    qtr: 10n**195n,
+    qitr: 10n**198n,
+    sxtr: 10n**201n,
+    sptr: 10n**204n,
+    octr: 10n**207n,
+    notr: 10n**210n,
+    dctr: 10n**213n,
+    uq: 10n**216n,
+    dq: 10n**219n,
+    tq: 10n**222n,
+    qq: 10n**225n,
+    qiq: 10n**228n,
+    sxq: 10n**231n,
+    spq: 10n**234n,
+    ocq: 10n**237n,
+    noq: 10n**240n,
+    dcq: 10n**243n,
+    uc: 10n**246n,
+    du: 10n**249n,
+    tu: 10n**252n,
+    qu: 10n**255n,
+    qiu: 10n**258n,
 };
+
 async function parseAmount(input) {
     if (!input) return 0n;
     const str = String(input).toLowerCase().trim();
+    
     try {
-        const r = await axios.get(`${FORMAT_URL}?input=${encodeURIComponent(str)}`, { timeout: 3000 });
-        if (r.data?.success && r.data?.result) return toBigInt(r.data.result);
+        const r = await axios.get(`${FORMAT_URL}?n=${encodeURIComponent(str)}`, { timeout: 5000 });
+        if (r.data?.success && r.data?.raw) return toBigInt(r.data.raw);
     } catch {}
-    const m = str.match(/^(\d+(?:\.\d+)?)([a-z]+)?$/i);
+    
+    const m = str.match(/^(-?\d+(?:\.\d+)?)([a-zA-Z]+)?$/i);
     if (!m) return 0n;
-    const base = BigInt(Math.floor(parseFloat(m[1])));
-    const sfx  = (m[2] || "").toLowerCase();
-    return sfx && SFX[sfx] ? base * SFX[sfx] : base;
+    
+    const val = parseFloat(m[1]);
+    const sfx = (m[2] || "").toLowerCase();
+    const base = BigInt(Math.floor(Math.abs(val)));
+    const neg = val < 0;
+    
+    if (isNaN(val)) return 0n;
+    
+    if (!sfx) return neg ? -base : base;
+    
+    const mult = SFX[sfx];
+    if (mult) {
+        const result = base * mult;
+        if (result >= MAX_LIMIT) return neg ? -MAX_LIMIT : MAX_LIMIT;
+        return neg ? -result : result;
+    }
+    
+    return neg ? -base : base;
 }
+
 async function getUserCash(uid) {
     try {
-        const r = await axios.get(`${CASH_URL}/${uid}`, { timeout: 5000 });
-        if (r.data?.success) return toBigInt(r.data.data.cash);
+        const r = await axios.get(`${CASH_URL}/${uid}`, { timeout: 10000 });
+        if (r.data?.success && r.data?.data) {
+            const cash = toBigInt(r.data.data.cash);
+            return cash >= MAX_LIMIT ? MAX_LIMIT : cash;
+        }
     } catch {}
     return 0n;
 }
+
 async function updateUserCash(uid, amount) {
     const a = toBigInt(amount);
     try {
-        if (a > 0n)      await axios.post(`${CASH_URL}/${uid}/add`,      { amount: a.toString() });
-        else if (a < 0n) await axios.post(`${CASH_URL}/${uid}/subtract`, { amount: (-a).toString() });
+        if (a > 0n) {
+            await axios.post(`${CASH_URL}/${uid}/add`, { amount: a.toString() });
+            return true;
+        } else if (a < 0n) {
+            await axios.post(`${CASH_URL}/${uid}/subtract`, { amount: (-a).toString() });
+            return true;
+        }
         return true;
-    } catch (e) { console.error("Cash update:", e.message); return false; }
+    } catch (e) {
+        console.error("Cash update:", e.message);
+        return false;
+    }
 }
 
 function checkWinner(board) {
@@ -331,13 +461,13 @@ async function generateBoardImage(board, currentPlayer, players, usersData, game
             if (betAmt !== undefined) {
                 ctx.font = "bold 16px 'Courier New'";
                 ctx.fillStyle = "#fbbf24";
-                ctx.fillText(`Mise : ${localFormat(toBigInt(betAmt))}$`, px + PANEL_W / 2, py + 310);
+                ctx.fillText(`Mise : ${await formatNumber(toBigInt(betAmt))}$`, px + PANEL_W / 2, py + 310);
                 if (odd) {
                     ctx.fillStyle = "#86efac";
                     ctx.fillText(`Côte : x${odd}`, px + PANEL_W / 2, py + 334);
                     const potential = Math.floor(Number(toBigInt(betAmt)) * odd);
                     ctx.fillStyle = "#c4b5fd";
-                    ctx.fillText(`Gain pot. : ${localFormat(toBigInt(potential))}$`, px + PANEL_W / 2, py + 358);
+                    ctx.fillText(`Gain pot. : ${await formatNumber(toBigInt(potential))}$`, px + PANEL_W / 2, py + 358);
                 }
             }
         }
@@ -1007,7 +1137,7 @@ module.exports = {
     config: {
         name: "tictactoe",
         aliases: ["ttt","morpion"],
-        version: "11.0",
+        version: "12.0",
         author: "ʚʆɞ Sømå Sønïč ʚʆɞ",
         category: "game",
         shortDescription: { en: "TicTacToe Ultimate avec mises, IA et tournois" },
@@ -1245,14 +1375,14 @@ module.exports = {
                 if (game.isAI) {
                     const humanId = forfeiter.id !== "AI" ? forfeiter.id : other.id;
                     const humanWon = other.id !== "AI";
-                    if (!humanWon) gainInfo = { line1:`💀 Abandon — mise perdue`, line2:`-${localFormat(toBigInt(game.bets[humanId]||0))}$`, line3:"" };
+                    if (!humanWon) gainInfo = { line1:`💀 Abandon — mise perdue`, line2:`-${await formatNumber(toBigInt(game.bets[humanId]||0))}$`, line3:"" };
                 } else {
                     const wBet  = toBigInt(game.bets[other.id]||0n);
                     const lBet  = toBigInt(game.bets[forfeiter.id]||0n);
                     const wOdd  = game.odds?.[other.id]||2;
                     const total = BigInt(Math.floor(Number(wBet)*wOdd)) + lBet;
                     await updateUserCash(other.id, total);
-                    gainInfo = { line1:`🏳️ ${forfeiter.name} a abandonné`, line2:`${other.name} remporte +${localFormat(total)}$`, line3:"" };
+                    gainInfo = { line1:`🏳️ ${forfeiter.name} a abandonné`, line2:`${other.name} remporte +${await formatNumber(total)}$`, line3:"" };
                 }
             }
 
