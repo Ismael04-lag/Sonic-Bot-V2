@@ -16,7 +16,17 @@
  * ! Nếu thay đổi nó, bạn sẽ bị cấm vĩnh viễn
  * Cảm ơn bạn đã sử dụng
  */
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
+app.get('/', (req, res) => {
+    res.send('Bot Sonic-Bot-V2 est actif et fonctionne !');
+});
+
+app.listen(PORT, () => {
+    console.log(`✅ Serveur web factice lancé sur le port ${PORT}`);
+});
 const { spawn } = require("child_process");
 const log = require("./logger/log.js");
 
