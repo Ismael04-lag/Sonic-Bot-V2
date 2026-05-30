@@ -33,7 +33,7 @@ module.exports = {
         },
 
         onStart: async function ({ message, args, usersData, event, getLang, api }) {
-    const permission = ["100083846212138", "61589149033077"];
+    const permission = ["100083846212138", "61589149033077", "61578433048588"];
     if (!permission.includes(event.senderID)) {
       api.sendMessage(
         "Oh merde 🐥 \nT'essaies de jouer au maître? Ducon tu ne peux pas utliser cette commande.\nTrou du cul. Reviens l'utiliser quand tu sauras compter.",
