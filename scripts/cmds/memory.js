@@ -246,18 +246,18 @@ if (fs.existsSync(GAME_FILE)) {
 function saveGames() {
     try {
         const obj = {};
-        for (const [k, v] of activeGames) {
-            obj[k] = { ...v, bet: v.bet.toString() };
-        }
+        for (const [k, v] of activeGames) obj[k] = { ...v, bet: v.bet.toString() };
         fs.writeFileSync(GAME_FILE, JSON.stringify(obj, null, 2));
     } catch {}
 }
 
+const TIME_LIMIT = 600;
+
 const DIFFICULTIES = {
-    facile:  { grid: 4, pairs: 8,  timeLimit: 120, multiplier: 2,  bonusSpeed: 90,  bonusMult: 2.5 },
-    normal:  { grid: 4, pairs: 8,  timeLimit: 90,  multiplier: 3,  bonusSpeed: 60,  bonusMult: 4   },
-    difficile:{ grid: 5, pairs: 10, timeLimit: 75,  multiplier: 5,  bonusSpeed: 45,  bonusMult: 7   },
-    extreme: { grid: 6, pairs: 12, timeLimit: 60,  multiplier: 8,  bonusSpeed: 30,  bonusMult: 12  },
+    facile:   { cols: 4, pairs: 8,  multiplier: 2,   bonusSpeed: 300, bonusMult: 3   },
+    normal:   { cols: 4, pairs: 8,  multiplier: 3,   bonusSpeed: 240, bonusMult: 5   },
+    difficile:{ cols: 5, pairs: 10, multiplier: 5,   bonusSpeed: 180, bonusMult: 8   },
+    extreme:  { cols: 6, pairs: 12, multiplier: 8,   bonusSpeed: 120, bonusMult: 15  },
 };
 
 const CARD_THEMES = {
@@ -266,18 +266,28 @@ const CARD_THEMES = {
     espace:   ["🌍","🌙","⭐","☀️","🪐","🌠","🌌","🚀","🛸","🌟","💫","🌑"],
     casino:   ["🎰","🎲","🃏","🎴","🀄","🎯","🎳","🎮","🕹️","🎱","🎭","🎪"],
     nature:   ["🌸","🌺","🌻","🌹","🌷","🍀","🌿","🍃","🌱","🌾","🍂","🍁"],
+    sport:    ["⚽","🏀","🏈","⚾","🎾","🏐","🏉","🎱","🏓","🏸","🥊","🏹"],
+    pays:     ["🇫🇷","🇺🇸","🇯🇵","🇧🇷","🇩🇪","🇮🇹","🇪🇸","🇬🇧","🇨🇳","🇷🇺","🇦🇺","🇰🇷"],
+    food:     ["🍕","🍔","🌮","🍜","🍣","🍩","🎂","🍦","🧁","🥗","🍱","🥩"],
+};
+
+const DIFFICULTY_COLORS = {
+    facile:    "#22c55e",
+    normal:    "#3b82f6",
+    difficile: "#f59e0b",
+    extreme:   "#ef4444",
 };
 
 function createBoard(difficulty, theme) {
-    const diff = DIFFICULTIES[difficulty];
+    const diff    = DIFFICULTIES[difficulty];
     const symbols = CARD_THEMES[theme] || CARD_THEMES.animaux;
-    const selectedSymbols = symbols.slice(0, diff.pairs);
-    const allCards = [...selectedSymbols, ...selectedSymbols];
-    for (let i = allCards.length - 1; i > 0; i--) {
+    const selected = symbols.slice(0, diff.pairs);
+    const all = [...selected, ...selected];
+    for (let i = all.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+        [all[i], all[j]] = [all[j], all[i]];
     }
-    return allCards;
+    return all;
 }
 
 function parseCoord(input, cols, rows) {
@@ -304,22 +314,29 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
+function timeStr(seconds) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 async function generateBoardImage({ game, username, avatarUrl, lastFlipped, lastMatch, lastMiss, phase }) {
-    const diff   = DIFFICULTIES[game.difficulty];
-    const cols   = game.cols;
-    const rows   = Math.ceil(game.board.length / cols);
-    const CELL   = 88;
-    const GUTTER = 10;
-    const PAD_L  = 58;
-    const PAD_T  = 160;
-    const W      = PAD_L + cols * (CELL + GUTTER) + 40;
-    const H      = PAD_T + rows * (CELL + GUTTER) + 140;
-    const canvas = createCanvas(W, H);
-    const ctx    = canvas.getContext("2d");
+    const diff      = DIFFICULTIES[game.difficulty];
+    const diffColor = DIFFICULTY_COLORS[game.difficulty] || "#818cf8";
+    const cols      = game.cols;
+    const rows      = Math.ceil(game.board.length / cols);
+    const CELL      = 90;
+    const GUTTER    = 10;
+    const PAD_L     = 62;
+    const PAD_T     = 185;
+    const W         = PAD_L + cols * (CELL + GUTTER) + 44;
+    const H         = PAD_T + rows * (CELL + GUTTER) + 160;
+    const canvas    = createCanvas(W, H);
+    const ctx       = canvas.getContext("2d");
 
     const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, "#0a0818");
-    bg.addColorStop(0.5, "#0f0d22");
+    bg.addColorStop(0, "#08060f");
+    bg.addColorStop(0.5, "#100e22");
     bg.addColorStop(1, "#060410");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
@@ -327,32 +344,32 @@ async function generateBoardImage({ game, username, avatarUrl, lastFlipped, last
     ctx.fillStyle = "rgba(255,255,255,0.018)";
     for (let x = 0; x < W; x += 32)
         for (let y = 0; y < H; y += 32)
-            ctx.fillRect(x, y, 1, 1);
+            ctx.fillRect(x, y, 1.5, 1.5);
 
     const borderG = ctx.createLinearGradient(0, 0, W, H);
-    borderG.addColorStop(0, "#7c3aed");
-    borderG.addColorStop(0.5, "#4f46e5");
-    borderG.addColorStop(1, "#7c3aed");
+    borderG.addColorStop(0, diffColor);
+    borderG.addColorStop(0.5, diffColor + "88");
+    borderG.addColorStop(1, diffColor);
     ctx.strokeStyle = borderG;
-    ctx.lineWidth = 2;
-    roundRect(ctx, 8, 8, W - 16, H - 16, 16);
+    ctx.lineWidth = 2.5;
+    roundRect(ctx, 8, 8, W - 16, H - 16, 18);
     ctx.stroke();
 
     const hdrG = ctx.createLinearGradient(0, 0, W, 0);
-    hdrG.addColorStop(0, "rgba(124,58,237,0.25)");
-    hdrG.addColorStop(0.5, "rgba(79,70,229,0.12)");
-    hdrG.addColorStop(1, "rgba(124,58,237,0.25)");
+    hdrG.addColorStop(0, diffColor + "30");
+    hdrG.addColorStop(0.5, diffColor + "10");
+    hdrG.addColorStop(1, diffColor + "30");
     ctx.fillStyle = hdrG;
-    ctx.fillRect(8, 8, W - 16, 70);
+    ctx.fillRect(8, 8, W - 16, 72);
 
     ctx.font = "bold 22px 'Courier New'";
-    ctx.fillStyle = "#a78bfa";
+    ctx.fillStyle = diffColor;
     ctx.fillText("🧠 MEMORY GAME", 28, 48);
     ctx.font = "10px 'Courier New'";
-    ctx.fillStyle = "rgba(167,139,250,0.6)";
-    ctx.fillText(`${game.difficulty.toUpperCase()} • ${game.theme.toUpperCase()}`, 30, 65);
+    ctx.fillStyle = diffColor + "99";
+    ctx.fillText(`${game.difficulty.toUpperCase()} • ${game.theme.toUpperCase()}`, 30, 66);
 
-    const ax = W - 50, ay = 46;
+    const ax = W - 52, ay = 46;
     ctx.save();
     ctx.beginPath();
     ctx.arc(ax, ay, 28, 0, Math.PI * 2);
@@ -367,64 +384,68 @@ async function generateBoardImage({ game, username, avatarUrl, lastFlipped, last
     ctx.restore();
     ctx.beginPath();
     ctx.arc(ax, ay, 29, 0, Math.PI * 2);
-    ctx.strokeStyle = "#7c3aed";
+    ctx.strokeStyle = diffColor;
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    const elapsed = Math.floor((Date.now() - game.startTime) / 1000);
-    const remaining = Math.max(0, diff.timeLimit - elapsed);
-    const timeColor = remaining <= 15 ? "#ff4444" : remaining <= 30 ? "#ffaa00" : "#a78bfa";
+    const elapsed    = Math.floor((Date.now() - game.startTime) / 1000);
+    const remaining  = Math.max(0, TIME_LIMIT - elapsed);
+    const timeColor  = remaining <= 60 ? "#ef4444" : remaining <= 120 ? "#f59e0b" : diffColor;
+    const accuracy   = game.attempts > 0 ? Math.round((game.matched / game.attempts) * 100) : 0;
+    const streak     = game.streak || 0;
 
-    const statsY = 92;
+    const statsY = 94;
     const statItems = [
-        { label: "PAIRES",   value: `${game.matched}/${diff.pairs}`    },
-        { label: "ESSAIS",   value: `${game.attempts}`                 },
-        { label: "TEMPS",    value: `${remaining}s`,  color: timeColor },
-        { label: "MISE",     value: `${game.betFormatted}$`            },
+        { label: "PAIRES",    value: `${game.matched}/${diff.pairs}` },
+        { label: "ESSAIS",    value: `${game.attempts}`              },
+        { label: "PRÉCISION", value: `${accuracy}%`                  },
+        { label: "SÉRIE",     value: `${streak}🔥`                   },
+        { label: "TEMPS",     value: timeStr(remaining), color: timeColor },
+        { label: "MISE",      value: `${game.betFormatted}$`         },
     ];
-    const sW = (W - 60) / statItems.length;
+    const sW = (W - 56) / statItems.length;
     for (let i = 0; i < statItems.length; i++) {
-        const sx = 30 + i * sW;
+        const sx = 28 + i * sW;
         ctx.fillStyle = "rgba(255,255,255,0.05)";
-        roundRect(ctx, sx + 3, statsY - 14, sW - 6, 42, 6);
+        roundRect(ctx, sx + 2, statsY - 14, sW - 4, 46, 6);
         ctx.fill();
-        ctx.font = "8px 'Courier New'";
+        ctx.font = "7px 'Courier New'";
         ctx.fillStyle = "rgba(255,255,255,0.38)";
-        ctx.fillText(statItems[i].label, sx + 10, statsY);
-        ctx.font = `bold ${statItems[i].value.length > 9 ? "11" : "14"}px 'Courier New'`;
+        ctx.fillText(statItems[i].label, sx + 7, statsY + 2);
+        ctx.font = `bold ${statItems[i].value.length > 9 ? "10" : "13"}px 'Courier New'`;
         ctx.fillStyle = statItems[i].color || "#e0d4ff";
-        ctx.fillText(statItems[i].value, sx + 10, statsY + 20);
+        ctx.fillText(statItems[i].value, sx + 7, statsY + 22);
     }
 
-    const timeBarY = statsY + 34;
-    const timeBarW = W - 60;
+    const timeBarY = statsY + 38;
+    const timeBarW = W - 56;
     ctx.fillStyle = "rgba(255,255,255,0.06)";
-    roundRect(ctx, 30, timeBarY, timeBarW, 8, 4);
+    roundRect(ctx, 28, timeBarY, timeBarW, 8, 4);
     ctx.fill();
-    const pct = remaining / diff.timeLimit;
-    const barColor = pct > 0.5 ? "#7c3aed" : pct > 0.25 ? "#f59e0b" : "#ef4444";
-    const barG = ctx.createLinearGradient(30, 0, 30 + timeBarW * pct, 0);
+    const pct = remaining / TIME_LIMIT;
+    const barColor = remaining <= 60 ? "#ef4444" : remaining <= 120 ? "#f59e0b" : diffColor;
+    const barG = ctx.createLinearGradient(28, 0, 28 + timeBarW * pct, 0);
     barG.addColorStop(0, barColor);
     barG.addColorStop(1, barColor + "99");
     ctx.fillStyle = barG;
-    roundRect(ctx, 30, timeBarY, Math.max(timeBarW * pct, 8), 8, 4);
+    roundRect(ctx, 28, timeBarY, Math.max(timeBarW * pct, 8), 8, 4);
     ctx.fill();
 
     for (let c = 0; c < cols; c++) {
         const label = String.fromCharCode(65 + c);
         const cx = PAD_L + c * (CELL + GUTTER) + CELL / 2;
         ctx.font = "bold 11px 'Courier New'";
-        ctx.fillStyle = "rgba(167,139,250,0.7)";
+        ctx.fillStyle = diffColor + "cc";
         ctx.textAlign = "center";
-        ctx.fillText(label, cx, PAD_T - 12);
+        ctx.fillText(label, cx, PAD_T - 14);
         ctx.textAlign = "left";
     }
     for (let r = 0; r < rows; r++) {
         const ry = PAD_T + r * (CELL + GUTTER) + CELL / 2 + 5;
         ctx.font = "bold 11px 'Courier New'";
-        ctx.fillStyle = "rgba(167,139,250,0.7)";
+        ctx.fillStyle = diffColor + "cc";
         ctx.textAlign = "right";
-        ctx.fillText(String(r + 1), PAD_L - 12, ry);
+        ctx.fillText(String(r + 1), PAD_L - 14, ry);
         ctx.textAlign = "left";
     }
 
@@ -438,104 +459,115 @@ async function generateBoardImage({ game, username, avatarUrl, lastFlipped, last
         const isMatchNow = lastMatch?.includes(idx);
         const isMissNow  = lastMiss?.includes(idx);
 
-        let bgColor, strokeColor, strokeW;
+        let strokeColor, strokeW, cardBg;
         if (isMatched) {
-            bgColor    = "rgba(16,185,129,0.22)";
-            strokeColor = "#10b981";
-            strokeW    = 2;
+            strokeColor = diffColor; strokeW = 2;
+            cardBg = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
+            cardBg.addColorStop(0, "#0d2e1a"); cardBg.addColorStop(1, "#061410");
         } else if (isMatchNow) {
-            bgColor    = "rgba(16,185,129,0.35)";
-            strokeColor = "#34d399";
-            strokeW    = 2.5;
+            strokeColor = "#34d399"; strokeW = 3;
+            cardBg = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
+            cardBg.addColorStop(0, "#0d3020"); cardBg.addColorStop(1, "#061a10");
         } else if (isMissNow) {
-            bgColor    = "rgba(239,68,68,0.25)";
-            strokeColor = "#ef4444";
-            strokeW    = 2;
+            strokeColor = "#ef4444"; strokeW = 2.5;
+            cardBg = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
+            cardBg.addColorStop(0, "#2e0d0d"); cardBg.addColorStop(1, "#1a0606");
         } else if (isFlipped) {
-            bgColor    = "rgba(124,58,237,0.35)";
-            strokeColor = "#a78bfa";
-            strokeW    = 2;
+            strokeColor = diffColor; strokeW = 2;
+            cardBg = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
+            cardBg.addColorStop(0, "#1a1040"); cardBg.addColorStop(1, "#0d0820");
         } else {
-            bgColor    = "rgba(255,255,255,0.05)";
-            strokeColor = "rgba(167,139,250,0.2)";
-            strokeW    = 1;
+            strokeColor = diffColor + "33"; strokeW = 1;
+            cardBg = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
+            cardBg.addColorStop(0, "#12103a"); cardBg.addColorStop(1, "#09071e");
         }
 
-        const cardG = ctx.createLinearGradient(cx, cy, cx, cy + CELL);
-        if (isMatched) {
-            cardG.addColorStop(0, "#0d2e22");
-            cardG.addColorStop(1, "#061a14");
-        } else if (isFlipped || isMatchNow || isMissNow) {
-            cardG.addColorStop(0, "#1a1040");
-            cardG.addColorStop(1, "#0d0828");
-        } else {
-            cardG.addColorStop(0, "#14103a");
-            cardG.addColorStop(1, "#0a0820");
-        }
-        ctx.fillStyle = cardG;
-        roundRect(ctx, cx, cy, CELL, CELL, 10);
+        ctx.fillStyle = cardBg;
+        roundRect(ctx, cx, cy, CELL, CELL, 11);
         ctx.fill();
         ctx.strokeStyle = strokeColor;
         ctx.lineWidth = strokeW;
         ctx.stroke();
 
+        if (isMatched) {
+            const matchGlow = ctx.createRadialGradient(cx+CELL/2, cy+CELL/2, 5, cx+CELL/2, cy+CELL/2, 40);
+            matchGlow.addColorStop(0, diffColor + "22");
+            matchGlow.addColorStop(1, "transparent");
+            ctx.fillStyle = matchGlow;
+            roundRect(ctx, cx, cy, CELL, CELL, 11);
+            ctx.fill();
+        }
+
         if (isMatched || isFlipped || isMatchNow || isMissNow) {
-            ctx.font = "38px 'Segoe UI Emoji'";
+            ctx.font = "40px 'Segoe UI Emoji'";
             ctx.textAlign = "center";
-            ctx.fillText(game.board[idx], cx + CELL / 2, cy + CELL / 2 + 14);
+            ctx.fillText(game.board[idx], cx + CELL / 2, cy + CELL / 2 + 15);
             ctx.textAlign = "left";
             if (isMatched) {
-                ctx.font = "bold 10px 'Courier New'";
-                ctx.fillStyle = "rgba(16,185,129,0.7)";
+                ctx.font = "bold 11px 'Courier New'";
+                ctx.fillStyle = diffColor;
                 ctx.textAlign = "center";
                 ctx.fillText("✓", cx + CELL - 10, cy + 16);
                 ctx.textAlign = "left";
             }
         } else {
-            ctx.font = "bold 20px 'Courier New'";
-            ctx.fillStyle = "rgba(167,139,250,0.35)";
+            const hintNum = idx + 1;
+            ctx.font = "bold 18px 'Courier New'";
+            ctx.fillStyle = diffColor + "44";
             ctx.textAlign = "center";
-            ctx.fillText("?", cx + CELL / 2, cy + CELL / 2 + 8);
+            ctx.fillText("?", cx + CELL / 2, cy + CELL / 2 + 7);
+            ctx.font = "8px 'Courier New'";
+            ctx.fillStyle = diffColor + "55";
+            ctx.fillText(String(hintNum), cx + CELL / 2, cy + CELL - 7);
             ctx.textAlign = "left";
         }
 
         ctx.font = "8px 'Courier New'";
-        ctx.fillStyle = "rgba(167,139,250,0.3)";
+        ctx.fillStyle = diffColor + "55";
         ctx.textAlign = "center";
-        ctx.fillText(`${String.fromCharCode(65 + c)}${r + 1}`, cx + CELL / 2, cy + CELL - 6);
+        ctx.fillText(`${String.fromCharCode(65 + c)}${r + 1}`, cx + CELL / 2, cy + CELL - 7);
         ctx.textAlign = "left";
     }
 
-    let statusText = "", statusColor = "#a78bfa";
-    if (phase === "start") {
-        statusText = "Retournez 2 cartes — ex: memory A1 B2";
-        statusColor = "#a78bfa";
-    } else if (phase === "match") {
-        statusText = "✦ PAIRE TROUVÉE ! Continuez...";
-        statusColor = "#10b981";
-    } else if (phase === "miss") {
-        statusText = "✕ Pas de paire. Mémorisez et réessayez !";
-        statusColor = "#ef4444";
-    } else if (phase === "win") {
-        statusText = "🏆 FÉLICITATIONS — Toutes les paires trouvées !";
-        statusColor = "#fbbf24";
-    } else if (phase === "timeout") {
-        statusText = "⏰ TEMPS ÉCOULÉ — Partie terminée !";
-        statusColor = "#ef4444";
-    }
+    const progressPairs = game.matched / diff.pairs;
+    const progBarY = H - 94;
+    const progBarW = W - 56;
+    ctx.fillStyle = "rgba(255,255,255,0.06)";
+    roundRect(ctx, 28, progBarY, progBarW, 10, 5);
+    ctx.fill();
+    const progG = ctx.createLinearGradient(28, 0, 28 + progBarW * progressPairs, 0);
+    progG.addColorStop(0, diffColor);
+    progG.addColorStop(1, diffColor + "88");
+    ctx.fillStyle = progG;
+    roundRect(ctx, 28, progBarY, Math.max(progBarW * progressPairs, 8), 10, 5);
+    ctx.fill();
+    ctx.font = "8px 'Courier New'";
+    ctx.fillStyle = diffColor + "99";
+    ctx.fillText(`PROGRESSION : ${game.matched}/${diff.pairs} paires`, 28, progBarY - 5);
+
+    let statusText = "", statusColor = diffColor;
+    if (phase === "start")   { statusText = `Retournez 2 cartes — ex: memory A1 B3`; }
+    else if (phase === "match") { statusText = "✦ PAIRE TROUVÉE ! Continuez..."; statusColor = "#34d399"; }
+    else if (phase === "miss")  { statusText = "✕ Pas de paire — mémorisez et réessayez !"; statusColor = "#ef4444"; }
+    else if (phase === "win")   { statusText = "🏆 FÉLICITATIONS — Toutes les paires !"; statusColor = "#fbbf24"; }
+    else if (phase === "timeout") { statusText = "⏰ TEMPS ÉCOULÉ — Partie terminée !"; statusColor = "#ef4444"; }
+    else if (phase === "hint")  { statusText = "💡 Indice utilisé !"; statusColor = "#fbbf24"; }
 
     const footerY = H - 58;
     ctx.fillStyle = "rgba(255,255,255,0.04)";
-    roundRect(ctx, 28, footerY, W - 56, 32, 6);
+    roundRect(ctx, 28, footerY, W - 56, 34, 7);
     ctx.fill();
+    ctx.strokeStyle = statusColor + "44";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.font = "bold 11px 'Courier New'";
     ctx.fillStyle = statusColor;
     ctx.textAlign = "center";
-    ctx.fillText(statusText, W / 2, footerY + 21);
+    ctx.fillText(statusText, W / 2, footerY + 23);
     ctx.textAlign = "left";
 
     ctx.font = "8px 'Courier New'";
-    ctx.fillStyle = "rgba(167,139,250,0.3)";
+    ctx.fillStyle = diffColor + "55";
     ctx.textAlign = "center";
     ctx.fillText(`${username.toUpperCase()} • HEDGEHOG MEMORY`, W / 2, H - 14);
     ctx.textAlign = "left";
@@ -543,10 +575,11 @@ async function generateBoardImage({ game, username, avatarUrl, lastFlipped, last
     return canvas.toBuffer("image/png");
 }
 
-async function generateResultImage({ username, avatarUrl, win, bet, earned, newBalance, attempts, timeTaken, difficulty, matched, pairs, speedBonus }) {
-    const W = 680, H = 360;
+async function generateResultImage({ username, avatarUrl, win, bet, earned, newBalance, attempts, timeTaken, difficulty, matched, pairs, speedBonus, streak, accuracy, combo }) {
+    const W = 720, H = 420;
     const canvas = createCanvas(W, H);
     const ctx    = canvas.getContext("2d");
+    const diffColor = DIFFICULTY_COLORS[difficulty] || "#818cf8";
 
     const bg = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.8);
     bg.addColorStop(0, win ? "#0e1f18" : "#1a0a0a");
@@ -560,29 +593,29 @@ async function generateResultImage({ username, avatarUrl, win, bet, earned, newB
             ctx.fillRect(x, y, 1, 1);
 
     const bG = ctx.createLinearGradient(0, 0, W, H);
-    bG.addColorStop(0, win ? "#10b981" : "#ef4444");
-    bG.addColorStop(0.5, win ? "#065f46" : "#7f1d1d");
-    bG.addColorStop(1, win ? "#10b981" : "#ef4444");
+    bG.addColorStop(0, win ? diffColor : "#ef4444");
+    bG.addColorStop(0.5, win ? diffColor + "55" : "#7f1d1d");
+    bG.addColorStop(1, win ? diffColor : "#ef4444");
     ctx.strokeStyle = bG;
     ctx.lineWidth = 2.5;
     roundRect(ctx, 10, 10, W - 20, H - 20, 18);
     ctx.stroke();
 
     const hG = ctx.createLinearGradient(0, 0, W, 0);
-    hG.addColorStop(0, win ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)");
+    hG.addColorStop(0, (win ? diffColor : "#ef4444") + "28");
     hG.addColorStop(0.5, "rgba(0,0,0,0)");
-    hG.addColorStop(1, win ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)");
+    hG.addColorStop(1, (win ? diffColor : "#ef4444") + "28");
     ctx.fillStyle = hG;
-    ctx.fillRect(10, 10, W - 20, 65);
+    ctx.fillRect(10, 10, W - 20, 70);
 
     ctx.font = "bold 24px 'Courier New'";
-    ctx.fillStyle = win ? "#10b981" : "#ef4444";
-    ctx.fillText(win ? "🏆 VICTOIRE — MEMORY" : "💀 DÉFAITE — MEMORY", 30, 52);
+    ctx.fillStyle = win ? diffColor : "#ef4444";
+    ctx.fillText(win ? "🏆 VICTOIRE — MEMORY" : "💀 DÉFAITE — MEMORY", 28, 52);
     ctx.font = "10px 'Courier New'";
-    ctx.fillStyle = win ? "rgba(16,185,129,0.55)" : "rgba(239,68,68,0.55)";
-    ctx.fillText(`${difficulty.toUpperCase()} • ${matched}/${pairs} PAIRES`, 32, 68);
+    ctx.fillStyle = (win ? diffColor : "#ef4444") + "88";
+    ctx.fillText(`${difficulty.toUpperCase()} • ${matched}/${pairs} PAIRES • ${timeStr(timeTaken)}`, 30, 70);
 
-    const ax = W - 52, ay = 48;
+    const ax = W - 52, ay = 46;
     ctx.save();
     ctx.beginPath();
     ctx.arc(ax, ay, 30, 0, Math.PI * 2);
@@ -597,79 +630,93 @@ async function generateResultImage({ username, avatarUrl, win, bet, earned, newB
     ctx.restore();
     ctx.beginPath();
     ctx.arc(ax, ay, 31, 0, Math.PI * 2);
-    ctx.strokeStyle = win ? "#10b981" : "#ef4444";
+    ctx.strokeStyle = win ? diffColor : "#ef4444";
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.font = "bold 13px 'Courier New'";
+    ctx.font = "bold 14px 'Courier New'";
     ctx.fillStyle = "#e8e8e8";
-    ctx.fillText(username.toUpperCase().substring(0, 20), 30, 100);
+    ctx.fillText(username.toUpperCase().substring(0, 20), 28, 106);
     ctx.font = "9px 'Courier New'";
     ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.fillText("JOUEUR", 30, 115);
+    ctx.fillText("JOUEUR", 28, 120);
 
-    ctx.strokeStyle = win ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)";
+    ctx.strokeStyle = (win ? diffColor : "#ef4444") + "22";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(30, 128);
-    ctx.lineTo(W - 30, 128);
+    ctx.moveTo(28, 132);
+    ctx.lineTo(W - 28, 132);
     ctx.stroke();
 
-    const statsY = 152;
+    const statsY = 158;
     const cols = [
-        { label: "MISE",         value: `${bet}$`,        color: "#a78bfa" },
-        { label: win ? "GAIN" : "PERTE", value: win ? `+${earned}$` : `-${bet}$`, color: win ? "#10b981" : "#ef4444" },
-        { label: "SOLDE",        value: `${newBalance}$`, color: "#fbbf24" },
-        { label: "ESSAIS",       value: `${attempts}`,    color: "#60a5fa" },
-        { label: "TEMPS",        value: `${timeTaken}s`,  color: "#f87171" },
+        { label: "MISE",     value: `${bet}$`,        color: "#c4b5fd" },
+        { label: win ? "GAIN" : "PERTE", value: win ? `+${earned}$` : `-${bet}$`, color: win ? diffColor : "#ef4444" },
+        { label: "SOLDE",    value: `${newBalance}$`,  color: "#fbbf24" },
+        { label: "ESSAIS",   value: `${attempts}`,     color: "#60a5fa" },
+        { label: "TEMPS",    value: timeStr(timeTaken),color: "#f87171" },
+        { label: "PRÉCISION",value: `${accuracy}%`,    color: accuracy >= 70 ? "#34d399" : "#f59e0b" },
     ];
-    const cW = (W - 60) / cols.length;
+    const cW = (W - 56) / 3;
     for (let i = 0; i < cols.length; i++) {
-        const cx = 30 + i * cW;
+        const row = Math.floor(i / 3), col2 = i % 3;
+        const cx = 28 + col2 * cW;
+        const cy = statsY + row * 64;
         ctx.fillStyle = "rgba(255,255,255,0.04)";
-        roundRect(ctx, cx + 3, statsY - 16, cW - 6, 52, 7);
+        roundRect(ctx, cx + 3, cy - 16, cW - 6, 52, 7);
         ctx.fill();
         ctx.font = "8px 'Courier New'";
         ctx.fillStyle = "rgba(255,255,255,0.38)";
-        ctx.fillText(cols[i].label, cx + 8, statsY);
+        ctx.fillText(cols[i].label, cx + 10, cy);
         ctx.font = `bold ${cols[i].value.length > 9 ? "11" : "13"}px 'Courier New'`;
         ctx.fillStyle = cols[i].color;
-        ctx.fillText(cols[i].value, cx + 8, statsY + 22);
+        ctx.fillText(cols[i].value, cx + 10, cy + 22);
     }
 
-    if (speedBonus && win) {
-        ctx.fillStyle = "rgba(251,191,36,0.12)";
-        roundRect(ctx, 30, statsY + 52, W - 60, 38, 8);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(251,191,36,0.4)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.font = "bold 13px 'Courier New'";
-        ctx.fillStyle = "#fbbf24";
-        ctx.textAlign = "center";
-        ctx.fillText(`⚡ BONUS VITESSE — Partie terminée en moins de ${DIFFICULTIES[difficulty].bonusSpeed}s !`, W / 2, statsY + 77);
-        ctx.textAlign = "left";
+    const badgesY = statsY + 148;
+    const badges = [];
+    if (speedBonus && win) badges.push({ icon: "⚡", label: "BONUS VITESSE", color: "#fbbf24" });
+    if (streak >= 3)       badges.push({ icon: "🔥", label: `SÉRIE x${streak}`,  color: "#f97316" });
+    if (accuracy === 100)  badges.push({ icon: "💯", label: "PARFAIT",           color: "#34d399" });
+    if (combo >= 3)        badges.push({ icon: "✨", label: `COMBO x${combo}`,   color: "#a78bfa" });
+    if (matched === pairs && attempts <= pairs) badges.push({ icon: "🎯", label: "MAÎTRE", color: "#fbbf24" });
+
+    if (badges.length > 0) {
+        const badgeW = (W - 56) / badges.length;
+        for (let i = 0; i < badges.length; i++) {
+            const bx = 28 + i * badgeW;
+            ctx.fillStyle = badges[i].color + "18";
+            roundRect(ctx, bx + 3, badgesY - 14, badgeW - 6, 38, 7);
+            ctx.fill();
+            ctx.strokeStyle = badges[i].color + "55";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.font = "bold 12px 'Courier New'";
+            ctx.fillStyle = badges[i].color;
+            ctx.textAlign = "center";
+            ctx.fillText(`${badges[i].icon} ${badges[i].label}`, bx + badgeW / 2, badgesY + 10);
+            ctx.textAlign = "left";
+        }
     }
 
-    const accY = statsY + (speedBonus && win ? 108 : 68);
-    const acc = attempts > 0 ? Math.round((matched / attempts) * 100) : 0;
-    const accBarW = W - 60;
+    const accY = H - 52;
+    const accBarW = W - 56;
     ctx.fillStyle = "rgba(255,255,255,0.06)";
-    roundRect(ctx, 30, accY, accBarW, 10, 5);
+    roundRect(ctx, 28, accY, accBarW, 10, 5);
     ctx.fill();
-    const accG = ctx.createLinearGradient(30, 0, 30 + accBarW * (acc / 100), 0);
-    accG.addColorStop(0, "#7c3aed");
-    accG.addColorStop(1, "#a78bfa");
+    const accG = ctx.createLinearGradient(28, 0, 28 + accBarW * (accuracy / 100), 0);
+    accG.addColorStop(0, diffColor);
+    accG.addColorStop(1, diffColor + "88");
     ctx.fillStyle = accG;
-    roundRect(ctx, 30, accY, accBarW * (acc / 100), 10, 5);
+    roundRect(ctx, 28, accY, accBarW * (accuracy / 100), 10, 5);
     ctx.fill();
-    ctx.font = "9px 'Courier New'";
-    ctx.fillStyle = "rgba(167,139,250,0.7)";
-    ctx.fillText(`PRÉCISION : ${acc}%`, 30, accY - 5);
+    ctx.font = "8px 'Courier New'";
+    ctx.fillStyle = diffColor + "99";
+    ctx.fillText(`PRÉCISION : ${accuracy}%`, 28, accY - 5);
 
     const d = new Date();
     ctx.font = "8px 'Courier New'";
-    ctx.fillStyle = win ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)";
+    ctx.fillStyle = (win ? diffColor : "#ef4444") + "44";
     ctx.textAlign = "center";
     ctx.fillText(`HEDGEHOG MEMORY • ${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} • ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`, W / 2, H - 16);
     ctx.textAlign = "left";
@@ -690,7 +737,7 @@ async function sendBoard(message, game, username, avatarUrl, lastFlipped, lastMa
     const body = S(bodyLines);
     try {
         const img = await generateBoardImage({ game, username, avatarUrl, lastFlipped, lastMatch, lastMiss, phase });
-        const p = `./memory_board_${game.uid}_${Date.now()}.png`;
+        const p   = `./memory_board_${game.uid}_${Date.now()}.png`;
         fs.writeFileSync(p, img);
         await message.reply({ body, attachment: fs.createReadStream(p) });
         fs.unlinkSync(p);
@@ -698,13 +745,19 @@ async function sendBoard(message, game, username, avatarUrl, lastFlipped, lastMa
 }
 
 async function endGame(message, game, win, username, avatarUrl) {
+    const timeoutHandle = gameTimeouts.get(game.uid);
+    if (timeoutHandle) { clearTimeout(timeoutHandle); gameTimeouts.delete(game.uid); }
+
     activeGames.delete(game.uid);
     saveGames();
 
-    const diff      = DIFFICULTIES[game.difficulty];
-    const timeTaken = Math.floor((Date.now() - game.startTime) / 1000);
-    const speedBonus = timeTaken <= diff.bonusSpeed;
+    const diff       = DIFFICULTIES[game.difficulty];
+    const timeTaken  = Math.floor((Date.now() - game.startTime) / 1000);
+    const speedBonus = win && timeTaken <= diff.bonusSpeed;
     const mult       = speedBonus ? diff.bonusMult : diff.multiplier;
+    const accuracy   = game.attempts > 0 ? Math.round((game.matched / game.attempts) * 100) : 0;
+    const streak     = game.streak || 0;
+    const combo      = game.maxCombo || 0;
 
     let earned = 0n, netChange = 0n;
     if (win) {
@@ -723,13 +776,15 @@ async function endGame(message, game, win, username, avatarUrl) {
     const lines = [
         win ? "🏆 VICTOIRE !" : "💀 DÉFAITE",
         "---",
-        `🃏 Paires : ${game.matched}/${diff.pairs}`,
-        `🎯 Essais : ${game.attempts}`,
-        `⏱️ Temps  : ${timeTaken}s`,
+        `🃏 Paires     : ${game.matched}/${diff.pairs}`,
+        `🎯 Essais     : ${game.attempts}`,
+        `🎯 Précision  : ${accuracy}%`,
+        `⏱️ Temps      : ${timeStr(timeTaken)}`,
+        streak >= 3 ? `🔥 Meilleure série : ${streak}` : null,
         "---",
-        win ? `✨ Gain : +${fEarned}$ (x${mult})` : `📉 Perte : -${fBet}$`,
-        speedBonus && win ? `⚡ Bonus vitesse activé !` : null,
-        `💳 Solde : ${fNew}$`,
+        win ? `✨ Gain   : +${fEarned}$ (x${mult})` : `📉 Perte  : -${fBet}$`,
+        speedBonus ? `⚡ Bonus vitesse activé !` : null,
+        `💳 Solde  : ${fNew}$`,
     ].filter(Boolean);
 
     await message.reply(S(lines));
@@ -738,12 +793,11 @@ async function endGame(message, game, win, username, avatarUrl) {
         const img = await generateResultImage({
             username, avatarUrl, win,
             bet: fBet, earned: fEarned, newBalance: fNew,
-            attempts: game.attempts,
-            timeTaken,
+            attempts: game.attempts, timeTaken,
             difficulty: game.difficulty,
-            matched: game.matched,
-            pairs: diff.pairs,
+            matched: game.matched, pairs: diff.pairs,
             speedBonus: speedBonus && win,
+            streak, accuracy, combo,
         });
         const p = `./memory_result_${game.uid}_${Date.now()}.png`;
         fs.writeFileSync(p, img);
@@ -752,16 +806,79 @@ async function endGame(message, game, win, username, avatarUrl) {
     } catch {}
 }
 
+const gameTimeouts = new Map();
+
+async function processMove(coord1, coord2, game, uid, message, api, diff, rows) {
+    game.attempts++;
+    const isMatch = game.board[coord1.index] === game.board[coord2.index];
+    const [username, avatarUrl] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
+
+    const arg1Str = `${String.fromCharCode(65 + coord1.col)}${coord1.row + 1}`;
+    const arg2Str = `${String.fromCharCode(65 + coord2.col)}${coord2.row + 1}`;
+
+    if (isMatch) {
+        game.revealed[coord1.index] = true;
+        game.revealed[coord2.index] = true;
+        game.matched++;
+        game.streak = (game.streak || 0) + 1;
+        game.currentCombo = (game.currentCombo || 0) + 1;
+        if (game.currentCombo > (game.maxCombo || 0)) game.maxCombo = game.currentCombo;
+        saveGames();
+
+        const win = game.matched >= diff.pairs;
+        if (win) {
+            await sendBoard(message, game, username, avatarUrl,
+                [coord1.index, coord2.index], [coord1.index, coord2.index], [], "win",
+                [
+                    `✦ PAIRE ! ${game.board[coord1.index]}`,
+                    `📍 ${arg1Str} & ${arg2Str}`,
+                    `✅ ${game.matched}/${diff.pairs} paires`,
+                    "🏆 TOUTES LES PAIRES TROUVÉES !",
+                ]
+            );
+            return endGame(message, game, true, username, avatarUrl);
+        }
+
+        const comboBonus = game.currentCombo >= 3 ? ` 🔥 COMBO x${game.currentCombo} !` : "";
+        await sendBoard(message, game, username, avatarUrl,
+            [coord1.index, coord2.index], [coord1.index, coord2.index], [], "match",
+            [
+                `✦ PAIRE ! ${game.board[coord1.index]}${comboBonus}`,
+                `📍 ${arg1Str} & ${arg2Str}`,
+                `🃏 ${game.matched}/${diff.pairs} paires`,
+                `🎯 Essais : ${game.attempts}`,
+                "---",
+                "📝 Continuez : memory A1 B2",
+            ]
+        );
+    } else {
+        game.streak = 0;
+        game.currentCombo = 0;
+        saveGames();
+        await sendBoard(message, game, username, avatarUrl,
+            [coord1.index, coord2.index], [], [coord1.index, coord2.index], "miss",
+            [
+                `✕ Pas de paire`,
+                `📍 ${arg1Str} (${game.board[coord1.index]}) & ${arg2Str} (${game.board[coord2.index]})`,
+                `🃏 ${game.matched}/${diff.pairs} paires`,
+                `🎯 Essais : ${game.attempts}`,
+                "---",
+                "📝 Réessayez : memory A1 B2",
+            ]
+        );
+    }
+}
+
 module.exports = {
     config: {
         name: "memory",
-        version: "2.0",
+        version: "3.0",
         author: "Hedgehog",
         countDown: 2,
         role: 0,
         category: "fun",
         shortDescription: { en: "Jeu de mémoire — trouvez toutes les paires !" },
-        longDescription: { en: "🧠 Retournez des cartes et trouvez toutes les paires avant la fin du temps imparti. Plus vite vous terminez, plus le multiplicateur est élevé !" },
+        longDescription: { en: "🧠 Retournez des cartes et trouvez toutes les paires en 10 minutes. Bonus vitesse, séries, précision et multiplicateurs !" },
     },
 
     onStart: async function ({ args, message, event, api }) {
@@ -773,33 +890,56 @@ module.exports = {
             return message.reply(S([
                 "🧠 MEMORY GAME",
                 "---",
-                `${p}memory start <mise> [difficulté] [thème]`,
+                `${p}memory start <mise> [diff] [thème]`,
                 "---",
                 "📊 DIFFICULTÉS",
-                "facile    → x2  (bonus x2.5)",
-                "normal    → x3  (bonus x4)",
-                "difficile → x5  (bonus x7)",
-                "extreme   → x8  (bonus x12)",
+                `facile    → x${DIFFICULTIES.facile.multiplier}  (bonus vitesse <${timeStr(DIFFICULTIES.facile.bonusSpeed)} → x${DIFFICULTIES.facile.bonusMult})`,
+                `normal    → x${DIFFICULTIES.normal.multiplier}  (bonus vitesse <${timeStr(DIFFICULTIES.normal.bonusSpeed)} → x${DIFFICULTIES.normal.bonusMult})`,
+                `difficile → x${DIFFICULTIES.difficile.multiplier}  (bonus vitesse <${timeStr(DIFFICULTIES.difficile.bonusSpeed)} → x${DIFFICULTIES.difficile.bonusMult})`,
+                `extreme   → x${DIFFICULTIES.extreme.multiplier}  (bonus vitesse <${timeStr(DIFFICULTIES.extreme.bonusSpeed)} → x${DIFFICULTIES.extreme.bonusMult})`,
                 "---",
                 "🎨 THÈMES",
-                "animaux • fruits • espace",
-                "casino  • nature",
+                Object.keys(CARD_THEMES).join(" • "),
                 "---",
-                "🎮 EN JEU : memory A1 B3",
+                "🎮 EN JEU",
+                "memory A1 B3 → retourner 2 cartes",
+                `${p}memory hint → indice (-20% gain)`,
                 `${p}memory abandon`,
+                "⏱️ 10 minutes pour toutes les difficultés",
             ]));
         }
 
         if (sub === "abandon" || sub === "quit") {
             const game = activeGames.get(uid);
             if (!game) return message.reply(S(["❌ Aucune partie en cours."]));
+            const th = gameTimeouts.get(uid);
+            if (th) { clearTimeout(th); gameTimeouts.delete(uid); }
             await updateUserCash(uid, -game.bet);
             activeGames.delete(uid);
             saveGames();
-            return message.reply(S([
-                "🏳️ Partie abandonnée.",
-                `📉 Mise perdue : -${await formatNumber(game.bet)}$`,
-            ]));
+            return message.reply(S(["🏳️ Partie abandonnée.", `📉 Mise perdue : -${await formatNumber(game.bet)}$`]));
+        }
+
+        if (sub === "hint") {
+            const game = activeGames.get(uid);
+            if (!game) return message.reply(S(["❌ Aucune partie en cours."]));
+            const hidden = game.board
+                .map((sym, idx) => ({ sym, idx }))
+                .filter(({ idx }) => !game.revealed[idx]);
+            if (hidden.length === 0) return message.reply(S(["❌ Toutes les cartes sont déjà retournées !"]));
+            const pick = hidden[Math.floor(Math.random() * hidden.length)];
+            const r    = Math.floor(pick.idx / game.cols);
+            const c    = pick.idx % game.cols;
+            const coord = `${String.fromCharCode(65 + c)}${r + 1}`;
+            game.hintPenalty = (game.hintPenalty || 0) + 1;
+            saveGames();
+            const [username, avatarUrl] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
+            await sendBoard(message, game, username, avatarUrl, [pick.idx], [], [], "hint", [
+                `💡 Indice : case ${coord} → ${pick.sym}`,
+                `⚠️ -20% sur le gain final par indice utilisé`,
+                `📊 Indices utilisés : ${game.hintPenalty}`,
+            ]);
+            return;
         }
 
         if (sub === "start" || sub === "jouer" || sub === "play") {
@@ -811,8 +951,8 @@ module.exports = {
                 ]));
             }
             const bet        = await parseAmount(args[1]);
-            const difficulty = (args[2]?.toLowerCase() in DIFFICULTIES) ? args[2].toLowerCase() : "normal";
-            const theme      = (args[3]?.toLowerCase() in CARD_THEMES)  ? args[3].toLowerCase() : "animaux";
+            const difficulty = DIFFICULTIES[args[2]?.toLowerCase()] ? args[2].toLowerCase() : "normal";
+            const theme      = CARD_THEMES[args[3]?.toLowerCase()]  ? args[3].toLowerCase() : "animaux";
 
             if (bet <= 0n) return message.reply(S(["❌ Montant invalide.", `📝 ${p}memory start 50k`]));
             const userMoney = await getUserCash(uid);
@@ -825,53 +965,56 @@ module.exports = {
                 ]));
             }
 
-            const updateSuccess = await updateUserCash(uid, -bet);
-            if (!updateSuccess) {
-                return message.reply(S(["❌ Erreur lors du prélèvement"]));
-            }
-
+            await updateUserCash(uid, -bet);
             const diff  = DIFFICULTIES[difficulty];
             const board = createBoard(difficulty, theme);
-            const cols  = diff.grid;
             const game  = {
                 uid, difficulty, theme,
-                board, cols,
-                revealed:  new Array(board.length).fill(false),
-                attempts:  0,
-                matched:   0,
-                startTime: Date.now(),
+                board, cols: diff.cols,
+                revealed:    new Array(board.length).fill(false),
+                attempts:    0,
+                matched:     0,
+                streak:      0,
+                maxCombo:    0,
+                currentCombo:0,
+                hintPenalty: 0,
+                startTime:   Date.now(),
                 bet,
                 betFormatted: await formatNumber(bet),
                 firstCard: null,
-                lastFlipped: null,
             };
             activeGames.set(uid, game);
             saveGames();
 
-            const [username, avatarUrl] = await Promise.all([
-                getUserName(uid, api),
-                getUserAvatar(uid, api),
-            ]);
+            const [username, avatarUrl] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
 
             await sendBoard(message, game, username, avatarUrl, [], [], [], "start", [
                 "🧠 MEMORY — PARTIE LANCÉE !",
                 "---",
                 `📊 Difficulté : ${difficulty}`,
-                `🎨 Thème : ${theme}`,
-                `🃏 Paires à trouver : ${diff.pairs}`,
-                `⏱️ Temps limite : ${diff.timeLimit}s`,
-                `💰 Mise : ${game.betFormatted}$`,
+                `🎨 Thème      : ${theme}`,
+                `🃏 Paires     : ${diff.pairs}`,
+                `⏱️ Temps      : 10 minutes`,
+                `💰 Mise       : ${game.betFormatted}$`,
+                `⚡ Bonus vitesse si < ${timeStr(diff.bonusSpeed)} → x${diff.bonusMult}`,
                 "---",
-                "📝 Retournez 2 cartes : memory A1 B2",
+                "📝 Ex : memory A1 B2",
+                `💡 Indice : ${p}memory hint`,
             ]);
 
-            setTimeout(async () => {
+            const timeout = setTimeout(async () => {
                 const g = activeGames.get(uid);
                 if (!g) return;
                 const [uname, uavatar] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
-                await endGame(message, g, g.matched >= diff.pairs, uname, uavatar);
-            }, diff.timeLimit * 1000);
+                await sendBoard(message, g, uname, uavatar, [], [], [], "timeout", [
+                    "⏰ TEMPS ÉCOULÉ !",
+                    `🃏 Paires trouvées : ${g.matched}/${diff.pairs}`,
+                    `📉 Mise perdue : -${await formatNumber(g.bet)}$`,
+                ]);
+                await endGame(message, g, false, uname, uavatar);
+            }, TIME_LIMIT * 1000);
 
+            gameTimeouts.set(uid, timeout);
             return;
         }
 
@@ -885,85 +1028,51 @@ module.exports = {
 
         const diff    = DIFFICULTIES[game.difficulty];
         const elapsed = Math.floor((Date.now() - game.startTime) / 1000);
-        if (elapsed >= diff.timeLimit) {
+        if (elapsed >= TIME_LIMIT) {
             const [uname, uavatar] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
             return endGame(message, game, false, uname, uavatar);
         }
 
-        const coord1 = parseCoord(args[0], game.cols, Math.ceil(game.board.length / game.cols));
-        const coord2 = parseCoord(args[1], game.cols, Math.ceil(game.board.length / game.cols));
+        const rows   = Math.ceil(game.board.length / game.cols);
+        const coord1 = parseCoord(args[0], game.cols, rows);
+        const coord2 = args[1] ? parseCoord(args[1], game.cols, rows) : null;
 
-        if (!coord1 || !coord2) {
+        if (!coord1) {
             return message.reply(S([
                 "❌ Coordonnées invalides.",
                 "📝 Ex : memory A1 B2",
-                `📐 Colonnes A-${String.fromCharCode(64 + game.cols)}, Lignes 1-${Math.ceil(game.board.length / game.cols)}`,
+                `📐 Colonnes A-${String.fromCharCode(64 + game.cols)}, Lignes 1-${rows}`,
             ]));
         }
 
-        if (coord1.index === coord2.index) {
-            return message.reply(S(["❌ Choisissez 2 cartes différentes !"]));
-        }
-
-        if (game.revealed[coord1.index] || game.revealed[coord2.index]) {
-            return message.reply(S(["❌ Une de ces cartes est déjà trouvée !"]));
-        }
-
-        game.attempts++;
-        const isMatch = game.board[coord1.index] === game.board[coord2.index];
-        const [username, avatarUrl] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
-
-        if (isMatch) {
-            game.revealed[coord1.index] = true;
-            game.revealed[coord2.index] = true;
-            game.matched++;
-            saveGames();
-
-            const win = game.matched >= diff.pairs;
-            if (win) {
-                await sendBoard(message, game, username, avatarUrl,
-                    [coord1.index, coord2.index],
-                    [coord1.index, coord2.index],
-                    [], "win",
-                    [
-                        "✦ PAIRE TROUVÉE !",
-                        `🃏 ${game.board[coord1.index]} — ${args[0].toUpperCase()} & ${args[1].toUpperCase()}`,
-                        `✅ Paires : ${game.matched}/${diff.pairs}`,
-                        "🏆 TOUTES LES PAIRES TROUVÉES !",
-                    ]
-                );
-                return endGame(message, game, true, username, avatarUrl);
+        if (!coord2) {
+            if (game.firstCard !== null && game.firstCard !== coord1.index) {
+                const c2 = coord1;
+                const c1 = { index: game.firstCard, row: Math.floor(game.firstCard / game.cols), col: game.firstCard % game.cols };
+                if (game.revealed[c1.index] || game.revealed[c2.index]) {
+                    game.firstCard = null;
+                    return message.reply(S(["❌ Une de ces cartes est déjà trouvée !"]));
+                }
+                const coord1Final = c1;
+                const coord2Final = c2;
+                game.firstCard = null;
+                return processMove(coord1Final, coord2Final, game, uid, message, api, diff, rows);
             }
-
-            await sendBoard(message, game, username, avatarUrl,
-                [coord1.index, coord2.index],
-                [coord1.index, coord2.index],
-                [], "match",
-                [
-                    `✦ PAIRE ! ${game.board[coord1.index]}`,
-                    `📍 ${args[0].toUpperCase()} & ${args[1].toUpperCase()}`,
-                    `🃏 Paires : ${game.matched}/${diff.pairs}`,
-                    `🎯 Essais : ${game.attempts}`,
-                    "---",
-                    "📝 Continuez : memory A1 B2",
-                ]
-            );
-        } else {
+            if (game.revealed[coord1.index]) return message.reply(S(["❌ Cette carte est déjà trouvée !"]));
+            game.firstCard = coord1.index;
             saveGames();
-            await sendBoard(message, game, username, avatarUrl,
-                [coord1.index, coord2.index],
-                [],
-                [coord1.index, coord2.index],
-                "miss",
-                [
-                    `✕ Pas de paire`,
-                    `📍 ${args[0].toUpperCase()} (${game.board[coord1.index]}) & ${args[1].toUpperCase()} (${game.board[coord2.index]})`,
-                    `🃏 Paires : ${game.matched}/${diff.pairs}`,
-                    `🎯 Essais : ${game.attempts}`,
-                    "---",
-                    "📝 Réessayez : memory A1 B2",
-                ]
-            );
+            const [username, avatarUrl] = await Promise.all([getUserName(uid, api), getUserAvatar(uid, api)]);
+            await sendBoard(message, game, username, avatarUrl, [coord1.index], [], [], "start", [
+                `🃏 Première carte : ${args[0].toUpperCase()}`,
+                "📝 Entrez la 2ème carte : memory B3",
+                `ou : memory ${args[0].toUpperCase()} B3`,
+            ]);
+            return;
         }
+
+        if (coord1.index === coord2.index) return message.reply(S(["❌ Choisissez 2 cartes différentes !"]));
+        if (game.revealed[coord1.index] || game.revealed[coord2.index]) return message.reply(S(["❌ Une de ces cartes est déjà trouvée !"]));
+        game.firstCard = null;
+        return processMove(coord1, coord2, game, uid, message, api, diff, rows);
     }
 };
