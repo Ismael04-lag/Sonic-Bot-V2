@@ -21,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    res.send('Bot Sonic-Bot-V2 est actif et fonctionne !');
+    res.send('Project HedgehogGPT uptaded successfully if you want to fork this, take this link https://github.com/Ismael04-lag/Sonic-Bot-V2 !');
 });
 
 app.listen(PORT, () => {
