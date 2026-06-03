@@ -139,14 +139,28 @@ module.exports = function (defaultFuncs, api, ctx) {
                         });
         }
 
+        // FIXED: Helper function to detect if a threadID is a user or a group
+        function isUserID(threadID) {
+                // If it's all digits, it's a user ID (for inbox)
+                return /^\\d+$/.test(threadID);
+        }
+
         function send(form, threadID, messageAndOTID, callback, isGroup) {
                 // We're doing a query to this to check if the given id is the id of
                 // a user or of a group chat. The form will be different depending
                 // on that.
-                if (utils.getType(threadID) === "Array") sendContent(form, threadID, false, messageAndOTID, callback);
+                if (utils.getType(threadID) === "Array") {
+                        sendContent(form, threadID, false, messageAndOTID, callback);
+                }
                 else {
-                        if (utils.getType(isGroup) != "Boolean") sendContent(form, threadID, threadID.length === 15, messageAndOTID, callback);
-                        else sendContent(form, threadID, !isGroup, messageAndOTID, callback);
+                        if (utils.getType(isGroup) != "Boolean") {
+                                // FIXED: Use modern regex-based detection instead of length check
+                                let isSingleUser = isUserID(threadID);
+                                sendContent(form, threadID, isSingleUser, messageAndOTID, callback);
+                        }
+                        else {
+                                sendContent(form, threadID, !isGroup, messageAndOTID, callback);
+                        }
                 }
         }
 
@@ -269,7 +283,7 @@ module.exports = function (defaultFuncs, api, ctx) {
                 // Changing this to accomodate an array of users
                 if (threadIDType !== "Array" && threadIDType !== "Number" && threadIDType !== "String") return callback({ error: "ThreadID should be of type number, string, or array and not " + threadIDType + "." });
 
-                if (replyToMessage && messageIDType !== 'String') return callback({ error: "MessageID should be of type string and not " + threadIDType + "." });
+                if (replyToMessage && messageIDType !== 'String') return callback({ error: "MessageID should be of type string and not " + messageIDType + "." });
 
                 if (msgType === "String") msg = { body: msg };
                 var disallowedProperties = Object.keys(msg).filter(prop => !allowedProperties[prop]);
