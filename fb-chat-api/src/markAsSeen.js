@@ -4,7 +4,7 @@ var utils = require("../utils");
 var log = require("npmlog");
 
 module.exports = function (defaultFuncs, api, ctx) {
-  return function markAsRead(seen_timestamp, callback) {
+  return function markAsSeen(seen_timestamp, callback) {
     if (utils.getType(seen_timestamp) == "Function" ||
       utils.getType(seen_timestamp) == "AsyncFunction") {
       callback = seen_timestamp;
@@ -21,7 +21,6 @@ module.exports = function (defaultFuncs, api, ctx) {
     if (!callback) {
       callback = function (err, data) {
         if (err) return rejectFunc(err);
-
         resolveFunc(data);
       };
     }
@@ -31,7 +30,7 @@ module.exports = function (defaultFuncs, api, ctx) {
     };
 
     defaultFuncs
-      .post("https://www.facebook.com/ajax/mercury/mark_seen.php", ctx.jar, form)
+      .post("https://www.facebook.com/messaging/mark_seen/", ctx.jar, form)
       .then(utils.saveCookies(ctx.jar))
       .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
       .then(function (resData) {

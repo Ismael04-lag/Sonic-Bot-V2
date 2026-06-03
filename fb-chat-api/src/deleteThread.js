@@ -26,7 +26,7 @@ module.exports = function (defaultFuncs, api, ctx) {
     for (var i = 0; i < threadOrThreads.length; i++) form["ids[" + i + "]"] = threadOrThreads[i];
 
     defaultFuncs
-      .post("https://www.facebook.com/ajax/mercury/delete_thread.php", ctx.jar, form)
+      .post("https://www.facebook.com/messaging/delete_thread/", ctx.jar, form)
       .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
       .then(function (resData) {
         if (resData.error) throw resData;
