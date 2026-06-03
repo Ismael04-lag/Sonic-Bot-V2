@@ -80,7 +80,7 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
             headers: {
                 Cookie: cookies,
                 Origin: 'https://www.facebook.com',
-                'User-Agent': ctx.globalOptions.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.64 Safari/537.36',
+                'User-Agent': ctx.globalOptions.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (Chrome-like)',
                 Referer: 'https://www.facebook.com/',
                 Host: new URL(host).hostname,
             },
@@ -90,7 +90,7 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
         },
         keepalive: 60,
         reschedulePings: true,
-        reconnectPeriod: 3,
+        reconnectPeriod: 3000,
     };
 
     if (typeof ctx.globalOptions.proxy != "undefined") {
@@ -99,7 +99,6 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
     }
 
     ctx.mqttClient = new mqtt.Client(_ => websocket(host, options.wsOptions), options);
-
     global.mqttClient = ctx.mqttClient;
 
     mqttClient.on('error', function (err) {
@@ -198,7 +197,6 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
                 }
             }
         }
-
     });
 
     mqttClient.on('close', function () { });
@@ -476,10 +474,8 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
                     }
                     return (function () { globalCallback(null, fmtMsg); })();
                 default:
-                    // console.log(v.delta)
                     return;
             }
-        //For group images
         case "ForcedFetch":
             if (!v.delta.threadKey) return;
             var mid = v.delta.messageId;
@@ -489,7 +485,6 @@ function parseDelta(defaultFuncs, api, ctx, globalCallback, v) {
                     "av": ctx.globalOptions.pageID,
                     "queries": JSON.stringify({
                         "o0": {
-                            //This doc_id is valid as of March 25, 2020
                             "doc_id": "2848441488556444",
                             "query_params": {
                                 "thread_and_message_id": {
@@ -634,135 +629,94 @@ function markDelivery(ctx, api, threadID, messageID) {
 
 module.exports = function (defaultFuncs, api, ctx) {
     let globalCallback = identity;
-    // function getSeqID() {
-    // ctx.t_mqttCalled = false;
-    // async function attemptRequest(retries = 3) {
-    //   try {
-    //     if (!ctx.fb_dtsg) {
-    //       const dtsg = await api.getFreshDtsg();
-    //       if (!dtsg) {
-    //         if (retries > 0) {
-    //           logger.Warning("Failed to get fb_dtsg, retrying...");
-    //                     await utils.sleep(2000); // Longer delay for token retry
-    //                     return attemptRequest(retries - 1);
-    //                   }
-    //                   throw { error: "Could not obtain fb_dtsg after multiple attempts" };
-    //                 }
-    //                 ctx.fb_dtsg = dtsg;
-    //               }
 
-    //               const form = {
-    //                 av: ctx.userID,
-    //                 fb_dtsg: ctx.fb_dtsg,
-    //                 queries: JSON.stringify({
-    //                   o0: {
-    //                     doc_id: '3336396659757871',
-    //                     query_params: {
-    //                       limit: 1,
-    //                       before: null,
-    //                       tags: ['INBOX'],
-    //                       includeDeliveryReceipts: false,
-    //                       includeSeqID: true
-    //                     }
-    //                   }
-    //                 }),
-    //                 __user: ctx.userID,
-    //                 __a: '1',
-    //                 __req: '8',
-    //                 __hs: '19577.HYP:comet_pkg.2.1..2.1',
-    //                 dpr: '1',
-    //                 fb_api_caller_class: 'RelayModern',
-    //                 fb_api_req_friendly_name: 'MessengerGraphQLThreadlistFetcher'
-    //               };
-
-    //               const headers = {
-    //                 'Content-Type': 'application/x-www-form-urlencoded',
-    //                 'Referer': 'https://www.facebook.com/',
-    //                 'Origin': 'https://www.facebook.com',
-    //                 'sec-fetch-site': 'same-origin',
-    //                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    //                 'Cookie': ctx.jar.getCookieString('https://www.facebook.com'),
-    //                 'accept': '*/*',
-    //                 'accept-encoding': 'gzip, deflate, br'
-    //               };
-
-    //               const resData = await defaultFuncs
-    //               .post("https://www.facebook.com/api/graphqlbatch/", ctx.jar, form, { headers })
-    //               .then(utils.parseAndCheckLogin(ctx, defaultFuncs));
-
-    //               if (debugSeq) {
-    //                 console.log('GraphQL SeqID Response:', JSON.stringify(resData, null, 2));
-    //               }
-
-    //               if (resData.error === 1357004 || resData.error === 1357001) {
-    //                 if (retries > 0) {
-    //                   logger.Warning("Session error, refreshing token and retrying...");
-    //                 ctx.fb_dtsg = null; // Force new token
-    //                 await utils.sleep(2000);
-    //                 return attemptRequest(retries - 1);
-    //               }
-    //               throw { error: "Session refresh failed after retries" };
-    //             }
-
-    //             if (!Array.isArray(resData)) {
-    //               throw { error: "Invalid response format", res: resData };
-    //             }
-
-    //             const seqID = resData[0]?.o0?.data?.viewer?.message_threads?.sync_sequence_id;
-    //             if (!seqID) {
-    //               throw { error: "Missing sync_sequence_id", res: resData };
-    //             }
-
-    //             ctx.lastSeqId = seqID;
-    //             if (debugSeq) {
-    //               console.log('Got SeqID:', ctx.lastSeqId);
-    //             }
-
-    //             return listenMqtt(defaultFuncs, api, ctx, globalCallback);
-
-    //           } catch (err) {
-    //             if (retries > 0) {
-    //               console.log("Request failed, retrying...");
-
-    //               return attemptRequest(retries - 1);
-    //             }
-    //             throw err;
-    //           }
-    //         }
-
-    //         return attemptRequest()
-    //                 .catch((err) => {
-    //                         log.error("getSeqId", err);
-    //                         if (utils.getType(err) == "Object" && err.error === "Not logged in") ctx.loggedIn = false;
-    //                         return globalCallback(err);
-    //                 });
-    //       }
-
-    getSeqID = function getSeqID() {
+    getSeqID = async function getSeqID() {
         ctx.t_mqttCalled = false;
-        defaultFuncs
-            .post("https://www.facebook.com/api/graphqlbatch/", ctx.jar, form)
-            .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-            .then((resData) => {
-                if (utils.getType(resData) != "Array") throw { error: "Not logged in", res: resData };
-                if (resData && resData[resData.length - 1].error_results > 0) throw resData[0].o0.errors;
-                if (resData[resData.length - 1].successful_results === 0) throw { error: "getSeqId: there was no successful_results", res: resData };
-                if (resData[0].o0.data.viewer.message_threads.sync_sequence_id) {
-                    ctx.lastSeqId = resData[0].o0.data.viewer.message_threads.sync_sequence_id;
-                    listenMqtt(defaultFuncs, api, ctx, globalCallback);
-                } else throw { error: "getSeqId: no sync_sequence_id found.", res: resData };
-            })
-            .catch((err) => {
-                log.error("getSeqId", err);
-                if (utils.getType(err) == "Object" && err.error === "Not logged in") ctx.loggedIn = false;
-                return globalCallback(err);
-            });
+        
+        const attemptRequest = async (retries = 3) => {
+            try {
+                if (!ctx.fb_dtsg) {
+                    const dtsg = await api.getFreshDtsg();
+                    if (!dtsg) {
+                        if (retries > 0) {
+                            console.log("⚠️ Failed to get fb_dtsg, retrying...");
+                            await utils.sleep(2000);
+                            return attemptRequest(retries - 1);
+                        }
+                        throw new Error("Could not obtain fb_dtsg after multiple attempts");
+                    }
+                    ctx.fb_dtsg = dtsg;
+                }
+
+                const requestForm = {
+                    av: ctx.userID,
+                    fb_dtsg: ctx.fb_dtsg,
+                    queries: JSON.stringify({
+                        o0: {
+                            doc_id: '3336396659757871',
+                            query_params: {
+                                limit: 1,
+                                before: null,
+                                tags: ['INBOX'],
+                                includeDeliveryReceipts: false,
+                                includeSeqID: true
+                            }
+                        }
+                    }),
+                    __user: ctx.userID,
+                    __a: '1',
+                    __req: '8',
+                    __hs: '19577.HYP:comet_pkg.2.1..2.1',
+                    dpr: '1',
+                    fb_api_caller_class: 'RelayModern',
+                    fb_api_req_friendly_name: 'MessengerGraphQLThreadlistFetcher'
+                };
+
+                const headers = {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Referer': 'https://www.facebook.com/',
+                    'Origin': 'https://www.facebook.com',
+                    'User-Agent': ctx.globalOptions.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Cookie': ctx.jar.getCookieString('https://www.facebook.com')
+                };
+
+                const resData = await defaultFuncs
+                    .post("https://www.facebook.com/api/graphqlbatch/", ctx.jar, requestForm, { headers })
+                    .then(utils.parseAndCheckLogin(ctx, defaultFuncs));
+
+                if (!Array.isArray(resData)) {
+                    throw new Error("Invalid response format");
+                }
+
+                const seqID = resData[0]?.o0?.data?.viewer?.message_threads?.sync_sequence_id;
+                if (!seqID) {
+                    throw new Error("Missing sync_sequence_id");
+                }
+
+                ctx.lastSeqId = seqID;
+                console.log("✅ Got SeqID:", ctx.lastSeqId);
+                listenMqtt(defaultFuncs, api, ctx, globalCallback);
+
+            } catch (err) {
+                if (retries > 0) {
+                    console.log("🔄 Request failed, retrying...", err.message);
+                    await utils.sleep(2000);
+                    return attemptRequest(retries - 1);
+                }
+                throw err;
+            }
+        };
+
+        return attemptRequest().catch((err) => {
+            log.error("getSeqId", err);
+            if (utils.getType(err) == "Object" && err.error === "Not logged in") ctx.loggedIn = false;
+            return globalCallback(err);
+        });
     };
 
     return function (callback) {
         class MessageEmitter extends EventEmitter {
             stopListening(callback) {
-
                 callback = callback || (() => { });
                 globalCallback = identity;
                 if (ctx.mqttClient) {
@@ -792,7 +746,6 @@ module.exports = function (defaultFuncs, api, ctx) {
             msgEmitter.emit("message", message);
         });
 
-        // Reset some stuff
         if (!ctx.firstListen)
             ctx.lastSeqId = null;
         ctx.syncToken = undefined;
@@ -815,7 +768,7 @@ module.exports = function (defaultFuncs, api, ctx) {
         };
 
         if (!ctx.firstListen || !ctx.lastSeqId) {
-            getSeqID(defaultFuncs, api, ctx, globalCallback);
+            getSeqID();
         } else {
             listenMqtt(defaultFuncs, api, ctx, globalCallback);
         }
